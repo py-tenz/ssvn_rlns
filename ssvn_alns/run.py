@@ -7,7 +7,7 @@ from config import BOT_TOKEN
 
 bot = Bot(token=BOT_TOKEN)
 
-dp = Dispatcher(bot)
+dp = Dispatcher(bot=bot)
 
 async def main():
     dp.include_router(router)
