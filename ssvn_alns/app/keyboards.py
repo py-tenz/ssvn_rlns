@@ -15,7 +15,7 @@ entry_test = InlineKeyboardMarkup(
 
 
 ##4. Задание первого дня
-first_day = InlineKeyboardButton(
+first_day = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Перейти к тестированию", callback_data="first_day_test_call")],
         [InlineKeyboardButton(text="Изучить теорию", callback_data="first_day_theory_call")]
