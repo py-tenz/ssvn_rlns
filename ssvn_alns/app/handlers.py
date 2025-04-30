@@ -46,7 +46,14 @@ async def get_birth_year(message: Message, state: FSMContext) -> None:
         user_data = await state.get_data()
         name = user_data.get('name')
         user_id = message.from_user.id
-        
+        await message.answer(
+            text="Отлично! Вы успешно зарегистрировались." \
+            "Теперь Вам доступно входное тестирование.\n" \
+            "Перейдите по ссылкам ниже и пройдите тесты" \
+            "После завершения нажмите кнопку 'Выполнено'",
+            reply_markup=kb.entry_test  ## Здесь добавляем клавиатуру с тестами
+        )
+
         # какая-то логика добавления в БД
 
     except ValueError:
