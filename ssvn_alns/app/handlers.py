@@ -6,10 +6,17 @@ from aiogram.fsm.context import FSMContext
 
 from . import keyboards as kb
 from aiogram.types import Message, CallbackQuery
-from app.common import user, User
+
 router = Router()
 
- 
+class User:
+
+    def __init__(self, name, birth_date, completed_tests_state):
+        self.name = name
+        self.birth_date = birth_date
+        self.completed_tests_state = 0
+
+user = User(0,0,0) 
 
 # Классы для FSM
 class Registration(StatesGroup):
