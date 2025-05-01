@@ -6,17 +6,10 @@ from aiogram.fsm.context import FSMContext
 
 from . import keyboards as kb
 from aiogram.types import Message, CallbackQuery
-
+from app.common import user, User
 router = Router()
 
-class User:
-
-    def __init__(self, name, birth_date, completed_tests_state):
-        self.name = name
-        self.birth_date = birth_date
-        self.completed_tests_state = 0
-
-user = User(0,0,0) 
+ 
 
 # Классы для FSM
 class Registration(StatesGroup):
@@ -28,7 +21,7 @@ class SecondTest(StatesGroup):
     remembered_words = State()
     stroop_test_time = State()
 
-tests = {1: 'first_day_test_call', 2: 'second_day_test_call', 3: 'third_day_test_call'}
+
 
 
 # Обработчик команды start
@@ -70,6 +63,7 @@ async def get_birth_year(message: Message, state: FSMContext) -> None:
             "После завершения нажмите кнопку 'Выполнено'",
             reply_markup=kb.entry_test  ## Здесь добавляем клавиатуру с тестами
         )
+        await state.clear()
 
         # какая-то логика добавления в БД
 
@@ -82,7 +76,7 @@ async def entry_test_complete(query:CallbackQuery):
     await query.message.answer(
         text="Отлично! Вы завершили тестирование. Теперь вы можете перейти к следующему этапу.\n"
                 "Выберите, что хотите сделать дальше:",
-        reply_markup=kb.first_day  ## Здесь добавляем клавиатуру с выбором первого дня
+        reply_markup=kb.universal_kb  ## Здесь добавляем клавиатуру с выбором первого дня
     )
 
 @router.callback_query(F.data == "test_complete_call")
@@ -90,9 +84,9 @@ async def test_complete (query:CallbackQuery):
     global user
     user.completed_tests_state += 1
     await query.message.answer(
-        text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ")
-    await 
-    
+        text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ",
+        reply_markup=kb.universal_kb
+        )
 
 
 @router.callback_query(F.data == "first_day_test_call")
