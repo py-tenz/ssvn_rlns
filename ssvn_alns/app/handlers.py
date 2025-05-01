@@ -9,7 +9,16 @@ from aiogram.types import Message, CallbackQuery
 
 router = Router()
 
-# Класс для FSM
+class User:
+
+    def __init__(self, name, birth_date, completed_tests_state):
+        self.name = name
+        self.birth_date = birth_date
+        self.completed_tests_state = 0
+
+user = User(0,0,0) 
+
+# Классы для FSM
 class Registration(StatesGroup):
     waiting_for_name = State()
     waiting_for_birth_year = State()
@@ -18,6 +27,8 @@ class SecondTest(StatesGroup):
     fast_count_tester = State()
     remembered_words = State()
     stroop_test_time = State()
+
+tests = {1: 'first_day_test_call', 2: 'second_day_test_call', 3: 'third_day_test_call'}
 
 
 # Обработчик команды start
@@ -33,23 +44,29 @@ async def command_start_handler(message: Message, state: FSMContext) -> None:
 
 @router.message(Registration.waiting_for_name)
 async def get_name(message: Message, state: FSMContext) -> None:
-    name = message.text
-    await state.update_data(name=name)
+    await state.update_data(waiting_for_name=message.text)
     await message.answer("Введите год своего рождения")
     await state.set_state(Registration.waiting_for_birth_year)
 
 
 @router.message(Registration.waiting_for_birth_year)
 async def get_birth_year(message: Message, state: FSMContext) -> None:
+    global user
     try:
         birth_year = int(message.text)
+        await state.update_data(waiting_for_birth_year=birth_year)
         user_data = await state.get_data()
-        name = user_data.get('name')
+        name = user_data.get('waiting_for_name')
+        birth_year = user_data.get('waiting_for_birth_year')
         user_id = message.from_user.id
+        user = User(name, birth_year, completed_tests_state=0)
         await message.answer(
-            text="Отлично! Вы успешно зарегистрировались." \
+            text=f"Отлично! Вы успешно зарегистрировались. Ваши данные: \n" \
+            f"Имя: {user.name} \n" \
+            f"Год рождения: {user.birth_date} \n" \
+            f"Тестов выполнено: {user.completed_tests_state} \n" \
             "Теперь Вам доступно входное тестирование.\n" \
-            "Перейдите по ссылкам ниже и пройдите тесты" \
+            "Перейдите по ссылкам ниже и пройдите тесты\n" \
             "После завершения нажмите кнопку 'Выполнено'",
             reply_markup=kb.entry_test  ## Здесь добавляем клавиатуру с тестами
         )
@@ -67,6 +84,15 @@ async def entry_test_complete(query:CallbackQuery):
                 "Выберите, что хотите сделать дальше:",
         reply_markup=kb.first_day  ## Здесь добавляем клавиатуру с выбором первого дня
     )
+
+@router.callback_query(F.data == "test_complete_call")
+async def test_complete (query:CallbackQuery):
+    global user
+    user.completed_tests_state += 1
+    await query.message.answer(
+        text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ")
+    await 
+    
 
 
 @router.callback_query(F.data == "first_day_test_call")
@@ -86,7 +112,7 @@ async def first_day_test(query: CallbackQuery):
     )
 
 ## Обработка второго дня, сделал через FSM просто ради красивого вывода
-@router.callback_query(F.data == "second_day")
+@router.callback_query(F.data == "second_day_test_call")
 async def second_day_test(query: CallbackQuery, state: FSMContext):
     second_day_state = await state.get_state()
     if second_day_state is None:
