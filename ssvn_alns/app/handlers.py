@@ -60,13 +60,14 @@ async def get_birth_year(message: Message, state: FSMContext) -> None:
         await message.answer("Введите год рождения в верном формате, например 1990.")
         return
     
-@router.message(F.data == "entry_test_complete_call")
-async def entry_test_complete(message: Message):
-    await message.answer(
+@router.callback_query(F.data == "entry_test_complete_call")
+async def entry_test_complete(query:CallbackQuery):
+    await query.message.answer(
         text="Отлично! Вы завершили тестирование. Теперь вы можете перейти к следующему этапу.\n"
                 "Выберите, что хотите сделать дальше:",
         reply_markup=kb.first_day  ## Здесь добавляем клавиатуру с выбором первого дня
     )
+
 
 @router.callback_query(F.data == "first_day_test_call")
 async def first_day_test(query: CallbackQuery):
