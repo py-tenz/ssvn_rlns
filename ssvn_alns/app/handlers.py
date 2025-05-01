@@ -73,7 +73,7 @@ async def get_birth_year(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data == "entry_test_complete_call")
 async def entry_test_complete(query:CallbackQuery):
     await query.message.answer(
-        text="Отлично! Вы завершили тестирование. Теперь вы можете перейти к следующему этапу.\n"
+        text="Теперь вы можете перейти к следующему этапу.\n"
                 "Выберите, что хотите сделать дальше:",
         reply_markup=kb.universal_kb  ## Здесь добавляем клавиатуру с выбором первого дня
     )

@@ -31,7 +31,7 @@ theory = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="Иллюзии", callback_data="1")],
         [InlineKeyboardButton(text="Startle Effect", callback_data="2")],
         [InlineKeyboardButton(text="Исследования подтрвеждающие валидность чат-бота", callback_data="3")],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="4")]
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
 
     ]
 )
