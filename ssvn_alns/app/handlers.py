@@ -23,7 +23,6 @@ class SecondTest(StatesGroup):
 
 
 
-
 # Обработчик команды start
 @router.message(CommandStart())
 async def command_start_handler(message: Message, state: FSMContext) -> None:
@@ -84,9 +83,13 @@ async def test_complete (query:CallbackQuery):
     global user
     user.completed_tests_state += 1
     await query.message.answer(
+<<<<<<< HEAD
         text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ",
         reply_markup=kb.universal_kb
         )
+=======
+        text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ") 
+>>>>>>> 14beb867bc535194148f445ad9d18f07dd08bbe6
 
 
 @router.callback_query(F.data == "first_day_test_call")
@@ -104,6 +107,12 @@ async def first_day_test(query: CallbackQuery):
              "Выполняй это упражнение поочередно правой и левой рукой.",
         reply_markup=kb.complete  ## Пока добавляю везде комплиты, не хочу создавать много клавиатур, попробую подумать, как реализовать
     )
+
+@router.callback_query(F.data == "theory_call")
+async def theory_call(query: CallbackQuery):
+    await query.message.answer(
+        reply_markup=kb.theory
+    ) 
 
 ## Обработка второго дня, сделал через FSM просто ради красивого вывода
 @router.callback_query(F.data == "second_day_test_call")
