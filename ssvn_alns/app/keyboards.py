@@ -19,7 +19,16 @@ entry_test = InlineKeyboardMarkup(
 first_day = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Перейти к тестированию", callback_data="first_day_test_call")],
-        [InlineKeyboardButton(text="Изучить теорию", callback_data="first_day_theory_call")]
+        [InlineKeyboardButton(text="Изучить теорию", callback_data="theory_call")]
+    ]
+)
+
+theory = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Иллюзии")],
+        [InlineKeyboardButton(text="Startle Effect")],
+        [InlineKeyboardButton(text="Исследования подтрвеждающие валидность чат-бота")],
+        [InlineKeyboardButton(text="Вернуться в основное меню")]
     ]
 )
 
