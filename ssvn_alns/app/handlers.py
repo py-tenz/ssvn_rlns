@@ -83,13 +83,9 @@ async def test_complete (query:CallbackQuery):
     global user
     user.completed_tests_state += 1
     await query.message.answer(
-<<<<<<< HEAD
         text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ",
         reply_markup=kb.universal_kb
         )
-=======
-        text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ") 
->>>>>>> 14beb867bc535194148f445ad9d18f07dd08bbe6
 
 
 @router.callback_query(F.data == "first_day_test_call")
@@ -111,6 +107,7 @@ async def first_day_test(query: CallbackQuery):
 @router.callback_query(F.data == "theory_call")
 async def theory_call(query: CallbackQuery):
     await query.message.answer(
+        text="Выберите, что вам интересно: ",
         reply_markup=kb.theory
     ) 
 
