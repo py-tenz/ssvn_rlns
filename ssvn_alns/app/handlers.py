@@ -1,180 +1,180 @@
 from aiogram import Router, F, html
 from aiogram.filters import CommandStart
-
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, CallbackQuery
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 
-from . import keyboards as kb
-from aiogram.types import Message, CallbackQuery
+from . import keyboards as kb  # Предположим, что клавиатуры уже определены где-то в keyboards.py
 
 router = Router()
 
-class User:
+# Словарь тестов по дням
+tests = {
+    1: "first_day",
+    2: "second_day",
+    3: "third_day"
+}
 
-    def __init__(self, name, birth_date, completed_tests_state):
-        self.name = name
-        self.birth_date = birth_date
-        self.completed_tests_state = 0
+# Генерация универсальной клавиатуры
+def get_universal_kb(completed_tests):
+    next_test_index = completed_tests
+    if next_test_index >= len(tests):
+        return InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Вы прошли все тесты!", callback_data="done")]
+        ])
 
-user = User(0,0,0) 
+    next_test_key = tests[next_test_index]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Перейти к тестированию", callback_data=f"{next_test_key}_test_call")],
+        [InlineKeyboardButton(text="Изучить теорию", callback_data="theory_call")]
+    ])
 
-# Классы для FSM
+# --- FSM для регистрации ---
 class Registration(StatesGroup):
-    waiting_for_name = State()
-    waiting_for_birth_year = State()
+    name = State()
+    birth_year = State()
 
+# --- FSM для второго дня тестирования ---
 class SecondTest(StatesGroup):
-    fast_count_tester = State()
+    fast_count = State()
     remembered_words = State()
-    stroop_test_time = State()
+    stroop_time = State()
 
-
-
-# Обработчик команды start
+# --- Начало работы ---
 @router.message(CommandStart())
-async def command_start_handler(message: Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if current_state is None:
-        await message.answer(f"Давайте знакомиться, как вас зовут?")    
-        await state.set_state(Registration.waiting_for_name)
-    else:
-        await message.answer("Вы уже в процессе регистрации.")
-
-
-@router.message(Registration.waiting_for_name)
-async def get_name(message: Message, state: FSMContext) -> None:
-    await state.update_data(waiting_for_name=message.text)
-    await message.answer("Введите год своего рождения")
-    await state.set_state(Registration.waiting_for_birth_year)
-
-
-@router.message(Registration.waiting_for_birth_year)
-async def get_birth_year(message: Message, state: FSMContext) -> None:
-    global user
-    try:
-        birth_year = int(message.text)
-        await state.update_data(waiting_for_birth_year=birth_year)
-        user_data = await state.get_data()
-        name = user_data.get('waiting_for_name')
-        birth_year = user_data.get('waiting_for_birth_year')
-        user_id = message.from_user.id
-        user = User(name, birth_year, completed_tests_state=0)
+async def cmd_start(message: Message, state: FSMContext):
+    data = await state.get_data()
+    if 'name' in data:
+        await message.answer("Вы уже зарегистрированы.")
+        completed = data.get('completed_tests', 0)
         await message.answer(
-            text=f"Отлично! Вы успешно зарегистрировались. Ваши данные: \n" \
-            f"Имя: {user.name} \n" \
-            f"Год рождения: {user.birth_date} \n" \
-            f"Тестов выполнено: {user.completed_tests_state} \n" \
-            "Теперь Вам доступно входное тестирование.\n" \
-            "Перейдите по ссылкам ниже и пройдите тесты\n" \
-            "После завершения нажмите кнопку 'Выполнено'",
-            reply_markup=kb.entry_test  ## Здесь добавляем клавиатуру с тестами
+            text="Вы можете продолжить обучение или пройти новые тесты.",
+            reply_markup=get_universal_kb(completed)
         )
-        await state.clear()
+        return
 
-        # какая-то логика добавления в БД
+    await message.answer("Давайте знакомиться. Как вас зовут?")
+    await state.set_state(Registration.name)
+
+# --- Регистрация имени ---
+@router.message(Registration.name)
+async def reg_name(message: Message, state: FSMContext):
+    await state.update_data(name=message.text)
+    await message.answer("Введите год рождения")
+    await state.set_state(Registration.birth_year)
+
+# --- Регистрация года рождения ---
+@router.message(Registration.birth_year)
+async def reg_birth_year(message: Message, state: FSMContext):
+    try:
+        year = int(message.text)
+        await state.update_data(birth_year=year, completed_tests=0)
+        data = await state.get_data()
+
+        await message.answer(
+            f"Отлично! Вы успешно зарегистрировались.\n"
+            f"Имя: {data['name']}\n"
+            f"Год рождения: {data['birth_year']}\n"
+            f"Тестов выполнено: 0\n"
+            f"Теперь вам доступны задания первого дня тренировок.",
+            reply_markup=kb.entry_test  
+        )
+        await state.set_state(None)  # Сброс состояния
 
     except ValueError:
-        await message.answer("Введите год рождения в верном формате, например 1990.")
-        return
-    
+        await message.answer("Введите год рождения числом, например: 1990")
+
+# --- Обработчик кнопки завершения входного теста ---
 @router.callback_query(F.data == "entry_test_complete_call")
-async def entry_test_complete(query:CallbackQuery):
+async def entry_test_done(query: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    await state.update_data(completed_tests=1)
     await query.message.answer(
-        text="Теперь вы можете перейти к следующему этапу.\n"
-                "Выберите, что хотите сделать дальше:",
-        reply_markup=kb.universal_kb  ## Здесь добавляем клавиатуру с выбором первого дня
+        "Теперь вы можете начать первый день тренировки.",
+        reply_markup=get_universal_kb(1)
     )
 
+# --- Обработчик кнопки завершения любого теста ---
 @router.callback_query(F.data == "test_complete_call")
-async def test_complete (query:CallbackQuery):
-    global user
-    user.completed_tests_state += 1
-    await query.message.answer(
-        text=f"Вы завершили тест номер {user.completed_tests_state}! Выберите действие дальше: ",
-        reply_markup=kb.universal_kb
+async def test_done(query: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    completed = data.get('completed_tests', 0) + 1
+    await state.update_data(completed_tests=completed)
+
+    if completed >= len(tests):
+        await query.message.answer("🎉 Поздравляем! Вы успешно завершили все тесты!")
+    else:
+        await query.message.answer(
+            f"Вы завершили тест номер {completed-1}!",
+            reply_markup=get_universal_kb(completed)
         )
 
-
+# --- Тест первого дня ---
 @router.callback_query(F.data == "first_day_test_call")
 async def first_day_test(query: CallbackQuery):
-    # Первое сообщение
     await query.message.answer(
-        text="Сегодня 1 день твоей тренировки, тебе предстоит выполнить 3 упражнения.\n"
-             "После выполнения задания, нажимай кнопку «Выполнено» и переходи к следующему."    
+        "Сегодня первый день тренировки. Выполните следующие упражнения:\n"
+        "1. На одной руке покажите детский жест примирения (сожмите пальцы в кулак, а мизинец выпрямите).\n"
+        "2. На другой руке покажите одобряющий жест — «класс».\n"
+        "Выполняйте упражнение поочередно правой и левой рукой."
     )
-    
-    # Второе сообщение с упражнением, сюда осталось добавить 2 картинки, сделаем позже
-    await query.message.answer(
-        text="1. На одной руке покажи детский жест примирения (сожми пальцы в кулак, а мизинец выпрями и слегка отклони).\n"
-             "2. На другой руке покажи одобряющий жест — «класс» (сожми кулак, а затем подними большой палец вверх).\n"
-             "Выполняй это упражнение поочередно правой и левой рукой.",
-        reply_markup=kb.complete  ## Пока добавляю везде комплиты, не хочу создавать много клавиатур, попробую подумать, как реализовать
-    )
+    await query.message.answer("Нажмите 'Выполнено', чтобы продолжить.", reply_markup=kb.complete)
 
-@router.callback_query(F.data == "theory_call")
-async def theory_call(query: CallbackQuery):
-    await query.message.answer(
-        text="Выберите, что вам интересно: ",
-        reply_markup=kb.theory
-    ) 
-
-## Обработка второго дня, сделал через FSM просто ради красивого вывода
+# --- Тест второго дня через FSM ---
 @router.callback_query(F.data == "second_day_test_call")
 async def second_day_test(query: CallbackQuery, state: FSMContext):
-    second_day_state = await state.get_state()
-    if second_day_state is None:
+    current = await state.get_state()
+    if current is None:
+        await query.message.answer("Сегодня второй день тренировки. Начинаем тестирование.")
         await query.message.answer(
-            text="Сегодня 2 день твоей тренировки, тебе предстоит выполнить 3 новых упражнения.\n"
+            "1. Засеките время и посчитайте вслух от 1 до 120 как можно быстрее. "
+            "Введите результат в секундах, например: 63"
         )
-        await query.message.answer(
-            text="1. Тест на счет. Засеки время и максимально быстро посчитай вслух от 1 до 120."
-                 " Запиши свой результат (в секундах), например: 63"
-        )
-        await state.set_state(SecondTest.fast_count_tester)
+        await state.set_state(SecondTest.fast_count)
     else:
-        await query.message.answer(
-            text="Вы уже в процессе прохождения испытания."
-        )
+        await query.message.answer("Вы уже в процессе теста.")
 
-@router.message(SecondTest.fast_count_tester)
-async def get_fast_count_tester(message: Message, state: FSMContext):
-    await state.update_data(fast_count_tester=message.text)
-    await state.set_state(SecondTest.remembered_words)
-    await message.answer(
-        text="2. Тест на запоминание слов. В течение 2 минут постарайся запомнить как можно больше записанных ниже слов."
-             " Напиши здесь, в чат, слова, которые запомнил. Сколько слов ты смог вспомнить за 2 минуты?",
-    )
+@router.message(SecondTest.fast_count)
+async def count_test(message: Message, state: FSMContext):
+    try:
+        time = int(message.text)
+        await state.update_data(fast_count=time)
+        await message.answer(
+            "2. За 2 минуты запомните как можно больше слов из списка. "
+            "Запишите слова, которые запомнили."
+        )
+        await state.set_state(SecondTest.remembered_words)
+    except ValueError:
+        await message.answer("Введите число, например: 65")
 
 @router.message(SecondTest.remembered_words)
-async def get_remembered_words(message: Message, state: FSMContext) -> None:
-    try: 
-        remembered_words_count = int(message.text)
-        await state.update_data(remembered_words=remembered_words_count)
-        await state.set_state(SecondTest.stroop_test_time)
+async def words_test(message: Message, state: FSMContext):
+    words = message.text.split()
+    await state.update_data(remembered_words=len(words))
+    await message.answer(
+        "3. Тест Струпа: называйте цвет слов, не читая их. Засеките время в секундах."
+    )
+    await state.set_state(SecondTest.stroop_time)
 
-        await message.answer(
-            text="3. Тест Струпа. Называй вслух цвет слов, делая это как можно быстрее. Будь внимателен: ты должен не читать слова, а называть их цвет."
-                 " Если ошибешься, назови цвет еще раз. Отметь время (в секундах), которое тебе понадобилось. Например, 34"
-        )
-    except ValueError:
-        await message.answer(
-            text="Введите значение цифрой, например: 24"  
-        )
-        return
-
-@router.message(SecondTest.stroop_test_time)
-async def get_stroop_test_time(message: Message, state: FSMContext) -> None:
+@router.message(SecondTest.stroop_time)
+async def stroop_test(message: Message, state: FSMContext):
     try:
-        stroop_time = int(message.text)
-        await state.update_data(stroop_test_time=stroop_time)
+        time = int(message.text)
+        await state.update_data(stroop_time=time)
+        data = await state.get_data()
 
-        contained_data = await state.get_data()
         await message.answer(
-            text=f"Ваши результаты:\n"
-                 f"1-й тест: {contained_data['fast_count_tester']} сек.\n"
-                 f"2-й тест: {contained_data['remembered_words']} слов\n"
-                 f"3-й тест: {contained_data['stroop_test_time']} сек."
+            f"Ваши результаты за второй день:\n"
+            f"1. Счет: {data['fast_count']} сек.\n"
+            f"2. Запомнил слов: {data['remembered_words']}\n"
+            f"3. Тест Струпа: {data['stroop_time']} сек."
         )
+        await state.set_state(None)
+        await message.answer("Нажмите 'Выполнено', чтобы продолжить.", reply_markup=kb.complete)
     except ValueError:
-        await message.answer("Введенное сообщение должно быть числом!")
-        return
+        await message.answer("Введите число, например: 34")
+
+# --- Теория ---
+@router.callback_query(F.data == "theory_call")
+async def theory_handler(query: CallbackQuery):
+    await query.message.answer("Выберите интересующую тему:", reply_markup=kb.theory)

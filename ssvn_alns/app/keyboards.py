@@ -1,5 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from app.common import tests, polzovatel
+
 
 
 
@@ -14,18 +14,12 @@ entry_test = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="Третье тестирование", url="https://forms.gle/HoepHvnXxNqAMHhX6")],
         [InlineKeyboardButton(text="Четвертое тестирование", url="https://forms.gle/MW6TF3bZEeEB4ywa6")],
         [InlineKeyboardButton(text="Выполнено", callback_data="entry_test_complete_call")],
-
     ] 
 )
 
 
 ##4. Задание первого дня
-universal_kb = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="Перейти к тестированию", callback_data={tests[polzovatel.completed_tests_state]} + "_test_call")],
-        [InlineKeyboardButton(text="Изучить теорию", callback_data="theory_call")]
-    ]
-)
+
 
 theory = InlineKeyboardMarkup(
     inline_keyboard=[
