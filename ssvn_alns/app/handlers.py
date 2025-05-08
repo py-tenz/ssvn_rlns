@@ -1,8 +1,9 @@
 from aiogram import Router, F, html
 from aiogram.filters import CommandStart
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, CallbackQuery
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message, CallbackQuery, InputMediaPhoto, FSInputFile
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from pathlib import Path
 
 from . import keyboards as kb  # Предположим, что клавиатуры уже определены где-то в keyboards.py
 
@@ -14,6 +15,31 @@ tests = {
     2: "second_day",
     3: "third_day"
 }
+
+FIRST_DAY_TASKS = {
+    1: {
+        "text": "Задание 1/3: На одной руке покажи детский жест примирения (сожми пальцы в кулак, а мизинец выпрями и слегка отклони). "
+                "На другой руке покажи одобряющий жест — «класс» (сожми кулак, а затем подними большой палец вверх). "
+                "Выполняй это упражнение поочередно правой и левой рукой.",
+        "photos": ["first_day_task1_1.jpg", "first_day_task1_2.jpg"]
+    },
+    2: {
+        "text": "Задание 2/3: Пометка «П» означает, что нужно поднять правую руку, «Л» - левую, а «О» - обе. "
+                "Проговори вслух последовательно буквы, одновременно выполняя действие, прописанное под каждой из них. "
+                "Упражнение считается выполненным, если ты без ошибок пройдешь все буквы от «А» до «Я» и в обратном направлении. "
+                "Засекай время: сделать это нужно как можно быстрее!",
+        "photos": ["first_day_task2_1.jpg"]
+    },
+    3: {
+        "text": "Задание 3/3: Сядь удобно. Скрести ноги в лодыжках. Держи колени свободно. "
+                "Держи колени свободно.  Наклонись вперед, руки плавно опусти вниз и сделай выдох, а затем выпрямись. "
+                "Подними руки и сделай вдох. Делай упражнение, наклоняясь вперед, влево и вправо. "
+                "Потом повтори упражнение, изменив положение ног.",
+        "photos": ["first_day_task3_1.jpg"]
+    }
+}
+
+MEDIA_PATH = Path(__file__).parent.parent / "media"
 
 # Генерация универсальной клавиатуры
 def get_universal_kb(completed_tests):
@@ -72,11 +98,8 @@ async def reg_birth_year(message: Message, state: FSMContext):
         data = await state.get_data()
 
         await message.answer(
-            f"Отлично! Вы успешно зарегистрировались.\n"
-            f"Имя: {data['name']}\n"
-            f"Год рождения: {data['birth_year']}\n"
-            f"Тестов выполнено: 0\n"
-            f"Теперь вам доступны задания первого дня тренировок.",
+            f"Перед началом тренировки необходимо пройти входное тестирование.\n"
+            f"Пожалуйста, перейдите по каждой из ссылок ниже и заполните форму. В поле “Уникальный номер” укажите ваш код: [уникальный номер 4-значный].",
             reply_markup=kb.entry_test  
         )
         await state.set_state(None)  # Сброс состояния
@@ -87,7 +110,6 @@ async def reg_birth_year(message: Message, state: FSMContext):
 # --- Обработчик кнопки завершения входного теста ---
 @router.callback_query(F.data == "entry_test_complete_call")
 async def entry_test_done(query: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
     await state.update_data(completed_tests=1)
     await query.message.answer(
         "Теперь вы можете начать первый день тренировки.",
@@ -98,27 +120,60 @@ async def entry_test_done(query: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "test_complete_call")
 async def test_done(query: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    completed = data.get('completed_tests', 0) + 1
-    await state.update_data(completed_tests=completed)
-
-    if completed >= len(tests):
-        await query.message.answer("🎉 Поздравляем! Вы успешно завершили все тесты!")
-    else:
-        await query.message.answer(
-            f"Вы завершили тест номер {completed-1}!",
-            reply_markup=get_universal_kb(completed)
-        )
+    day = data.get('current_day')
+    current_task = data.get('current_task', 1)
+    completed = data.get('completed_tests', 0)
+    
+    if day == 1:
+        if current_task < 3:  # Если есть еще задания
+            next_task = current_task + 1
+            await state.update_data(current_task=next_task)
+            await show_day_task(query.message, next_task, state)
+        else:
+            await state.update_data(
+                completed_tests=completed + 1,
+                current_day=None,
+                current_task=None
+            )
+            await query.message.answer(
+                "Вы успешно завершили первый день тренировок!",
+                reply_markup=get_universal_kb(completed + 1)
+            )
+    
+    await query.answer()
 
 # --- Тест первого дня ---
 @router.callback_query(F.data == "first_day_test_call")
-async def first_day_test(query: CallbackQuery):
-    await query.message.answer(
-        "Сегодня первый день тренировки. Выполните следующие упражнения:\n"
-        "1. На одной руке покажите детский жест примирения (сожмите пальцы в кулак, а мизинец выпрямите).\n"
-        "2. На другой руке покажите одобряющий жест — «класс».\n"
-        "Выполняйте упражнение поочередно правой и левой рукой."
+async def first_day_test(query: CallbackQuery, state: FSMContext):
+    await state.update_data(
+        current_day=1,
+        current_task=1,
     )
-    await query.message.answer("Нажмите 'Выполнено', чтобы продолжить.", reply_markup=kb.complete)
+    
+    # Показываем первое задание
+    await show_day_task(query.message, 1, state)
+    await query.answer()
+
+# функция для отображения заданий первого дня
+async def show_day_task(message: Message, task_num: int, state: FSMContext):
+    data = await state.get_data()
+    day = data.get('current_day')
+    
+    if day == 1:
+        task = FIRST_DAY_TASKS[task_num]
+        
+        media = [
+            InputMediaPhoto(media=FSInputFile(MEDIA_PATH / photo))
+            for photo in task["photos"]
+        ]
+        
+        await message.answer_media_group(media=media)
+        await message.answer(
+            f"День 1. {task['text']}\n\n"
+            f"Нажмите 'Выполнено', чтобы продолжить.",
+            reply_markup=kb.complete
+        )
+        
 
 # --- Тест второго дня через FSM ---
 @router.callback_query(F.data == "second_day_test_call")
@@ -127,7 +182,7 @@ async def second_day_test(query: CallbackQuery, state: FSMContext):
     if current is None:
         await query.message.answer("Сегодня второй день тренировки. Начинаем тестирование.")
         await query.message.answer(
-            "1. Засеките время и посчитайте вслух от 1 до 120 как можно быстрее. "
+            "1. Тест на счет. Засеки время и максимально быстро посчитай вслух от 1 до 120.\n"
             "Введите результат в секундах, например: 63"
         )
         await state.set_state(SecondTest.fast_count)
@@ -138,11 +193,14 @@ async def second_day_test(query: CallbackQuery, state: FSMContext):
 async def count_test(message: Message, state: FSMContext):
     try:
         time = int(message.text)
+        photo_path=MEDIA_PATH / "second_day_task2_1.jpg"
         await state.update_data(fast_count=time)
         await message.answer(
-            "2. За 2 минуты запомните как можно больше слов из списка. "
-            "Запишите слова, которые запомнили."
+            "2. Тест на запоминание слов. "
+            "В течение 2 минут постарайся запомнить как можно больше записанных ниже слов. "
+            "Напиши здесь, в чат, слова, которые запомнил. Сколько слов ты смог вспомнить за 2 минуты?"
         )
+        await message.answer_photo(photo=FSInputFile(photo_path))
         await state.set_state(SecondTest.remembered_words)
     except ValueError:
         await message.answer("Введите число, например: 65")
@@ -150,10 +208,14 @@ async def count_test(message: Message, state: FSMContext):
 @router.message(SecondTest.remembered_words)
 async def words_test(message: Message, state: FSMContext):
     words = message.text.split()
+    photo_path=MEDIA_PATH / "second_day_task3_1.jpg"
     await state.update_data(remembered_words=len(words))
     await message.answer(
-        "3. Тест Струпа: называйте цвет слов, не читая их. Засеките время в секундах."
+        "3. Тест Струпа. Называй вслух цвет слов, делая это как можно быстрее. "
+        "Будь внимателен: ты должен не читать слова, а называть их цвет. "
+        "Если ошибешься, назови цвет еще раз. Отметь время, которое тебе понадобилось."
     )
+    await message.answer_photo(photo=FSInputFile(photo_path))
     await state.set_state(SecondTest.stroop_time)
 
 @router.message(SecondTest.stroop_time)
