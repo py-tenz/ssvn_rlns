@@ -231,8 +231,13 @@ async def stroop_test(message: Message, state: FSMContext):
             f"2. Запомнил слов: {data['remembered_words']}\n"
             f"3. Тест Струпа: {data['stroop_time']} сек."
         )
+        completed = data.get('completed_tests', 0)
+        new_completed = completed + 1
+
+        await state.update_data(completed_tests=new_completed)
         await state.set_state(None)
-        await message.answer("Нажмите 'Выполнено', чтобы продолжить.", reply_markup=kb.complete)
+
+        await message.answer("Вы успешно завершили тестирование.", reply_markup=get_universal_kb(new_completed))
     except ValueError:
         await message.answer("Введите число, например: 34")
 

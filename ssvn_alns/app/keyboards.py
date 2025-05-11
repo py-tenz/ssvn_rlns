@@ -1,11 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 
-
-
-
-
-
 ## 3. Входное тестирование
 entry_test = InlineKeyboardMarkup(
     inline_keyboard=[
