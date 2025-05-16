@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
 
 
 ## 3. Входное тестирование
@@ -15,13 +15,29 @@ entry_test = InlineKeyboardMarkup(
 ##4. Задание первого дня
 theory = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="Иллюзии", callback_data="1")],
-        [InlineKeyboardButton(text="Startle Effect", callback_data="2")],
-        [InlineKeyboardButton(text="Исследования подтрвеждающие валидность чат-бота", callback_data="3")],
+        [InlineKeyboardButton(text="Иллюзии", callback_data="theory:illusions")],
+        [InlineKeyboardButton(text="Startle Effect", callback_data="theory:startleffect")],
+        [InlineKeyboardButton(text="Исследования подтвеждающие валидность чат-бота", callback_data="theory:research")],
         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
 
     ]
 )
+
+startle_effect = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
+    ])
+illusions = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
+    ])
+research = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
+    ])
 
 #Клавиатура завершения действия
 complete = InlineKeyboardMarkup(

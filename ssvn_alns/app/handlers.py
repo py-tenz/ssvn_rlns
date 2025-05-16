@@ -116,7 +116,7 @@ async def reg_birth_year(message: Message, state: FSMContext):
 async def entry_test_done(query: CallbackQuery, state: FSMContext):
     await state.update_data(completed_tests=1)
     await query.message.answer(
-        "Теперь ты можешь начать первый день тренировки.",
+        "Теперь ты можешь начать тренировки.",
         reply_markup=get_universal_kb(1)
     )
 
@@ -249,3 +249,23 @@ async def stroop_test(message: Message, state: FSMContext):
 @router.callback_query(F.data == "theory_call")
 async def theory_handler(query: CallbackQuery):
     await query.message.answer("Выбери интересующую тему:", reply_markup=kb.theory)
+
+@router.callback_query(F.data.startswith("theory:"))
+async def theory_call_handler(callback: CallbackQuery):
+    topic = callback.data.removeprefix("theory:")
+
+    if topic == "startleffect":
+        await callback.message.answer(
+            text="Перейдите к теории по кнопке ниже:",
+            reply_markup=kb.startle_effect
+        )
+    elif topic == "illusions":
+        await callback.message.answer(
+            text="Перейдите к теории по кнопке ниже:",
+            reply_markup=kb.illusions
+        )
+    elif topic == "research":
+        await callback.message.answer(
+            text="Перейдите к теории по кнопке ниже:",
+            reply_markup=kb.research
+        )
