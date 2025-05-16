@@ -12,10 +12,7 @@ entry_test = InlineKeyboardMarkup(
     ] 
 )
 
-
 ##4. Задание первого дня
-
-
 theory = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Иллюзии", callback_data="1")],
