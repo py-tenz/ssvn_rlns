@@ -18,7 +18,7 @@ theory = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="Иллюзии", callback_data="theory:illusions")],
         [InlineKeyboardButton(text="Startle Effect", callback_data="theory:startleffect")],
         [InlineKeyboardButton(text="Исследования подтвеждающие валидность чат-бота", callback_data="theory:research")],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
 
     ]
 )
@@ -26,17 +26,17 @@ theory = InlineKeyboardMarkup(
 startle_effect = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
     ])
 illusions = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
     ])
 research = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="entry_test_complete_call")]
+        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
     ])
 
 #Клавиатура завершения действия
