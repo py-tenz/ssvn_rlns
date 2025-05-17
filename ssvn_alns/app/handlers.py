@@ -269,3 +269,11 @@ async def theory_call_handler(callback: CallbackQuery):
             text="Перейдите к теории по кнопке ниже:",
             reply_markup=kb.research
         )
+
+
+@router.callback_query(F.data.startswith("open_word_file:"))
+async def send_word_file(callback: CallbackQuery):
+    file = FSInputFile(f"media/{callback.data.removeprefix("open_word_file:")}.txt")
+    await callback.message.answer_document(file, caption="Вот ваш файл:")
+    await callback.answer()
+

@@ -25,17 +25,17 @@ theory = InlineKeyboardMarkup(
 
 startle_effect = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
+        [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:startle_effect")],
         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
     ])
 illusions = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
+        [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:illusions")],
         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
     ])
 research = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="Тeория", web_app=WebAppInfo(url="https://docs.google.com/document/d/1rqipDyv4OkAYrjmXJmFMlCcoqf3xLZ2l_pc2q2OLAkE/edit?tab=t.0"))],
+        [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:research")],
         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
     ])
 
