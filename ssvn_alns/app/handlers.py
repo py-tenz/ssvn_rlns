@@ -56,7 +56,7 @@ def get_universal_kb(completed_tests):
 
     next_test_key = tests[next_test_index]
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Перейти к тестированию", callback_data=f"{next_test_key}_test_call")],
+        [InlineKeyboardButton(text="Перейти к упражнениям", callback_data=f"{next_test_key}_test_call")],
         [InlineKeyboardButton(text="Изучить теорию", callback_data="theory_call")]
     ])
 
@@ -84,7 +84,7 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    await message.answer("Давайте знакомиться. Как тебя зовут?")
+    await message.answer("Давай знакомиться. Как тебя зовут?")
     await state.set_state(Registration.name)
 
 # Регистрация имени 
@@ -103,7 +103,7 @@ async def reg_birth_year(message: Message, state: FSMContext):
 
         await message.answer(
             f"Перед началом тренировки необходимо пройти входное тестирование.\n"
-            f"Пожалуйста, перейди по каждой из ссылок ниже и заполните форму. В поле “Уникальный номер” укажи свой код: [уникальный номер 4-значный].",
+            f"Пожалуйста, перейди по каждой из ссылок ниже и заполни форму.",
             reply_markup=kb.entry_test  
         )
         await state.clear() # Сброс состояния после регистрации
@@ -184,7 +184,7 @@ async def show_day_task(message: Message, task_num: int, state: FSMContext):
 async def second_day_test(query: CallbackQuery, state: FSMContext):
     current = await state.get_state()
     if current is None:
-        await query.message.answer("Сегодня второй день тренировки. Начинаем тестирование.")
+        await query.message.answer("Сегодня второй день тренировки. Начинаем!")
         await query.message.answer(
             "1. Тест на счет. Засеки время и максимально быстро посчитай вслух от 1 до 120.\n"
             "Введи результат в секундах, например: 63"
@@ -202,7 +202,7 @@ async def count_test(message: Message, state: FSMContext):
         await message.answer(
             "2. Тест на запоминание слов. "
             "В течение 2 минут постарайся запомнить как можно больше записанных ниже слов. "
-            "Напиши здесь, в чат, слова, которые запомнил. Сколько слов ты смог вспомнить за 2 минуты?"
+            "Сколько слов ты смог вспомнить за 2 минуты?"
         )
         await message.answer_photo(photo=FSInputFile(photo_path))
         await state.set_state(SecondTest.remembered_words)
@@ -217,7 +217,7 @@ async def words_test(message: Message, state: FSMContext):
     await message.answer(
         "3. Тест Струпа. Называй вслух цвет слов, делая это как можно быстрее. "
         "Будь внимателен: ты должен не читать слова, а называть их цвет. "
-        "Если ошибешься, назови цвет еще раз. Отметь время, которое тебе понадобилось."
+        "Если ошибешься, назови цвет еще раз. Отметь время, которое тебе понадобилось (в секундах)."
     )
     await message.answer_photo(photo=FSInputFile(photo_path))
     await state.set_state(SecondTest.stroop_time)
