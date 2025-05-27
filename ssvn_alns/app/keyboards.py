@@ -15,29 +15,29 @@ entry_test = InlineKeyboardMarkup(
 ##4. Задание первого дня
 theory = InlineKeyboardMarkup(
     inline_keyboard=[
-        [InlineKeyboardButton(text="Иллюзии", callback_data="theory:illusions")],
-        [InlineKeyboardButton(text="Startle Effect", callback_data="theory:startleffect")],
-        [InlineKeyboardButton(text="Исследования подтвеждающие валидность чат-бота", callback_data="theory:research")],
+        [InlineKeyboardButton(text="Иллюзии", url="https://docs.google.com/document/d/1E8ibRMK-u-WXHECDxp583TZk1g5DgzAs/edit?tab=t.0#heading=h.rihmfqm9vg6")],
+        [InlineKeyboardButton(text="Startle Effect", url="https://docs.google.com/document/d/1m4bhAjZB0QBkVtHP2bfHzATYU4nThbAF/edit?tab=t.0")],
+        [InlineKeyboardButton(text="Исследования, подтвеждающие валидность чат-бота", url="https://docs.google.com/document/d/1d-bfSeZU7U-IfZa4BmNBaHAXpSSb_U1J/edit?tab=t.0")],
         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
 
     ]
 )
 
-startle_effect = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:startle_effect")],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
-    ])
-illusions = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:illusions")],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
-    ])
-research = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:research")],
-        [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
-    ])
+# startle_effect = InlineKeyboardMarkup(
+#     inline_keyboard=[
+#         [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:startle_effect")],
+#         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
+#     ])
+# illusions = InlineKeyboardMarkup(
+#     inline_keyboard=[
+#         [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:illusions")],
+#         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
+#     ])
+# research = InlineKeyboardMarkup(
+#     inline_keyboard=[
+#         [InlineKeyboardButton(text="Тeория", callback_data="open_word_file:research")],
+#         [InlineKeyboardButton(text="Вернуться в основное меню", callback_data="test_complete_call")]
+#     ])
 
 #Клавиатура завершения действия
 complete = InlineKeyboardMarkup(
