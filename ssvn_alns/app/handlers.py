@@ -56,7 +56,7 @@ def get_universal_kb(completed_tests):
 
     next_test_key = tests[next_test_index]
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Перейти к тестированию", callback_data=f"{next_test_key}_test_call")],
+        [InlineKeyboardButton(text="Перейти к упражнениям", callback_data=f"{next_test_key}_test_call")],
         [InlineKeyboardButton(text="Изучить теорию", callback_data="theory_call")]
     ])
 
@@ -103,7 +103,7 @@ async def reg_birth_year(message: Message, state: FSMContext):
 
         await message.answer(
             f"Перед началом тренировки необходимо пройти входное тестирование.\n"
-            f"Пожалуйста, перейди по каждой из ссылок ниже и заполните форму. В поле “Уникальный номер” укажи свой код: [уникальный номер 4-значный].",
+            f"Пожалуйста, перейди по каждой из ссылок ниже и заполните форму.",
             reply_markup=kb.entry_test  
         )
         await state.clear() # Сброс состояния после регистрации
@@ -211,13 +211,13 @@ async def count_test(message: Message, state: FSMContext):
 
 @router.message(SecondTest.remembered_words)
 async def words_test(message: Message, state: FSMContext):
-    words = message.text.split()
+    words = message.text
     photo_path=MEDIA_PATH / "second_day_task3_1.jpg"
-    await state.update_data(remembered_words=len(words))
+    await state.update_data(remembered_words=words)
     await message.answer(
         "3. Тест Струпа. Называй вслух цвет слов, делая это как можно быстрее. "
         "Будь внимателен: ты должен не читать слова, а называть их цвет. "
-        "Если ошибешься, назови цвет еще раз. Отметь время, которое тебе понадобилось."
+        "Если ошибешься, назови цвет еще раз. Отметь время, которое тебе понадобилось (в секундах)."
     )
     await message.answer_photo(photo=FSInputFile(photo_path))
     await state.set_state(SecondTest.stroop_time)
