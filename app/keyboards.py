@@ -2,13 +2,24 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-def menu_kb(next_day: int | None, completed_day: int, max_day: int, entry_test_completed: bool) -> InlineKeyboardMarkup:
+
+def menu_kb(
+    *,
+    next_day: int | None,
+    completed_day: int,
+    max_day: int,
+    entry_test_completed: bool,
+    can_continue: bool = True,
+    locked_until: str | None = None,
+) -> InlineKeyboardMarkup:
     rows = []
     if not entry_test_completed:
         rows.append([InlineKeyboardButton(text="Входное тестирование", callback_data="entry_test:open")])
     else:
-        if next_day and next_day <= max_day:
+        if next_day and next_day <= max_day and can_continue:
             rows.append([InlineKeyboardButton(text=f"Продолжить: день {next_day}", callback_data="training:next")])
+        elif next_day and next_day <= max_day and locked_until:
+            rows.append([InlineKeyboardButton(text=f"Следующий день откроется {locked_until}", callback_data="noop")])
         rows.append([InlineKeyboardButton(text="Выбрать день", callback_data="training:choose_page:1")])
 
     rows.append([InlineKeyboardButton(text="Изучить теорию", callback_data="theory:menu")])
