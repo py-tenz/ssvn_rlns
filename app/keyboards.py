@@ -49,6 +49,37 @@ def lesson_kb(day_num: int) -> InlineKeyboardMarkup:
         ]
     )
 
+
+def task_kb(*, day_num: int, task_idx: int, total_tasks: int, mode: str, allow_complete: bool) -> InlineKeyboardMarkup:
+    """Keyboard for task-by-task flow.
+
+    mode:
+      - "active": user is completing the current (next) day; progress is persisted.
+      - "view": user is just browsing a day; progress is NOT persisted and completion is disabled.
+    """
+    rows: list[list[InlineKeyboardButton]] = []
+
+    is_last = task_idx >= (total_tasks - 1)
+    if not is_last:
+        if mode == "active":
+            rows.append([InlineKeyboardButton(text="Перейти к следующему заданию ➡️", callback_data="training:task_next")])
+        else:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="Перейти к следующему заданию ➡️",
+                        callback_data=f"training:task_show:{day_num}:{task_idx+1}",
+                    )
+                ]
+            )
+    else:
+        # No "next" button on the last task.
+        if allow_complete:
+            rows.append([InlineKeyboardButton(text="День выполнен ✅", callback_data=f"training:complete:{day_num}")])
+
+    rows.append([InlineKeyboardButton(text="В меню", callback_data="menu:open")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
 def days_page_kb(days: list[int], page: int, page_size: int, max_day: int) -> InlineKeyboardMarkup:
     # Buttons by 2 in a row
     rows = []

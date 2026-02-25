@@ -42,6 +42,7 @@ class Mongo:
         await self.users.create_index([("created_at", ASCENDING)])
         await self.users.create_index([("updated_at", ASCENDING)])
         await self.users.create_index([("next_unlock_at", ASCENDING)])
+        await self.users.create_index([("in_progress_day", ASCENDING)])
         # lessons: unique dayNum
         await self.lessons.create_index([("dayNum", ASCENDING)], unique=True)
 
@@ -63,6 +64,11 @@ class Mongo:
             # When the next day becomes available (UTC datetime). Missing/None => unlocked.
             "next_unlock_at": None,
             "last_completed_at": None,
+            # In-day progress (task-by-task)
+            # in_progress_day: day number currently being completed (usually completed_day + 1)
+            # current_task: zero-based task index within that day
+            "in_progress_day": None,
+            "current_task": 0,
             "created_at": now,
             "updated_at": now,
         }
@@ -105,9 +111,28 @@ class Mongo:
                     "completed_day": completed_day,
                     "next_unlock_at": next_unlock_at,
                     "last_completed_at": last_completed_at,
+                    "in_progress_day": None,
+                    "current_task": 0,
                     "updated_at": now,
                 }
             },
+            upsert=False,
+        )
+
+    async def set_task_progress(self, tg_id: int, day_num: int, task_idx: int) -> None:
+        """Persist in-day progress (task index) for the given day."""
+        now = datetime.now(timezone.utc)
+        await self.users.update_one(
+            {"_id": tg_id},
+            {"$set": {"in_progress_day": int(day_num), "current_task": int(task_idx), "updated_at": now}},
+            upsert=False,
+        )
+
+    async def clear_task_progress(self, tg_id: int) -> None:
+        now = datetime.now(timezone.utc)
+        await self.users.update_one(
+            {"_id": tg_id},
+            {"$set": {"in_progress_day": None, "current_task": 0, "updated_at": now}},
             upsert=False,
         )
 

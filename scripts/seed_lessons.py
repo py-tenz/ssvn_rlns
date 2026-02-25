@@ -2,11 +2,20 @@
 
 Usage:
   python scripts/seed_lessons.py lessons.json mongodb://localhost:27017 pilot_training
-JSON format:
+JSON format (recommended):
   [
-    {"dayNum": 1, "text": "...", "images": ["a.jpg", "b.jpg"]},
+    {
+      "dayNum": 1,
+      "tasks": [
+        {"text": "Задание 1...", "images": ["a.jpg", "b.jpg"]},
+        {"text": "Задание 2...", "images": []}
+      ]
+    },
     ...
   ]
+
+Legacy format is also supported and will be converted into a single task:
+  {"dayNum": 1, "text": "...", "images": ["a.jpg"]}
 """
 import json
 import sys
@@ -34,11 +43,36 @@ def main():
     ops = []
     for item in lessons:
         day = int(item["dayNum"])
-        text = str(item.get("text", ""))
-        images = item.get("images") or []
-        if not isinstance(images, list):
-            images = []
-        ops.append(UpdateOne({"dayNum": day}, {"$set": {"dayNum": day, "text": text, "images": images}}, upsert=True))
+
+        # Normalize to tasks
+        tasks = item.get("tasks")
+        if isinstance(tasks, list) and tasks:
+            norm_tasks = []
+            for t in tasks:
+                if not isinstance(t, dict):
+                    continue
+                t_text = str(t.get("text", ""))
+                t_images = t.get("images") or []
+                if not isinstance(t_images, list):
+                    t_images = []
+                norm_tasks.append({"text": t_text, "images": t_images})
+            if not norm_tasks:
+                norm_tasks = [{"text": "", "images": []}]
+        else:
+            # legacy
+            text = str(item.get("text", ""))
+            images = item.get("images") or []
+            if not isinstance(images, list):
+                images = []
+            norm_tasks = [{"text": text, "images": images}]
+
+        ops.append(
+            UpdateOne(
+                {"dayNum": day},
+                {"$set": {"dayNum": day, "tasks": norm_tasks}},
+                upsert=True,
+            )
+        )
 
     if ops:
         res = col.bulk_write(ops)

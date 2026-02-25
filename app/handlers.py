@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from datetime import datetime, timezone, timedelta, time
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,7 @@ MEDIA_PATH = Path(__file__).parent.parent / "media"
 PAGE_SIZE = 10  # for day picker
 
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
+LOCAL_TZ = MOSCOW_TZ
 
 # ---------- FSM for registration ----------
 class Registration(StatesGroup):
@@ -32,17 +33,17 @@ class Registration(StatesGroup):
     birth_year = State()
 
 # ---------- Helpers ----------
-def _format_dt_berlin(dt_utc: datetime) -> str:
-    """Human-friendly datetime in Europe/Berlin, e.g. 10.02.2026 08:00."""
-    dt_local = dt_utc.astimezone(BERLIN_TZ)
+def _format_dt_local(dt_utc: datetime) -> str:
+    """Human-friendly datetime in local timezone (MSK), e.g. 10.02.2026 08:00."""
+    dt_local = dt_utc.astimezone(LOCAL_TZ)
     return dt_local.strftime("%d.%m.%Y %H:%M")
 
 
 def _compute_next_unlock_at(now_utc: datetime) -> datetime:
-    """Next day at 08:00 Europe/Berlin, returned as UTC datetime."""
-    now_local = now_utc.astimezone(BERLIN_TZ)
+    """Next day at 08:00 MSK, returned as UTC datetime."""
+    now_local = now_utc.astimezone(LOCAL_TZ)
     next_date = now_local.date() + timedelta(days=1)
-    unlock_local = datetime.combine(next_date, time(hour=8, minute=0), tzinfo=BERLIN_TZ)
+    unlock_local = datetime.combine(next_date, time(hour=8, minute=0), tzinfo=LOCAL_TZ)
     return unlock_local.astimezone(timezone.utc)
 
 
@@ -84,7 +85,7 @@ async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
 
     # You can continue only when next day exists and unlock time has come.
     can_continue = bool(entry_done and next_day and (next_day <= max_day) and unlocked)
-    locked_until = _format_dt_berlin(next_unlock_at) if (next_unlock_at and not unlocked) else None
+    locked_until = _format_dt_local(next_unlock_at) if (next_unlock_at and not unlocked) else None
 
     await message.answer(
         "Главное меню:",
@@ -98,22 +99,54 @@ async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
         ),
     )
 
-async def send_lesson(message: Message, mongo: Mongo, day_num: int, *, allow_complete: bool = True) -> None:
-    lesson = await mongo.get_lesson(day_num)
-    if not lesson:
-        await message.answer(
-            f"Урок на день {day_num} не найден в базе. Сообщи администратору."
-        )
-        return
+def _lesson_to_tasks(lesson: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize lesson document into a list of tasks.
 
-    text = str(lesson.get("text", "")).strip()
-    images = lesson.get("images") or []
+    Supports:
+      1) New format: {dayNum, tasks:[{text, images}, ...]}
+      2) Legacy format: {dayNum, text, images} -> converted into 1 task
+    """
+    raw_tasks = lesson.get("tasks")
+    tasks: list[dict[str, Any]] = []
+
+    if isinstance(raw_tasks, list) and raw_tasks:
+        for t in raw_tasks:
+            if not isinstance(t, dict):
+                continue
+            text = str(t.get("text", "")).strip()
+            images = t.get("images") or []
+            if not isinstance(images, list):
+                images = []
+            tasks.append({"text": text, "images": images})
+    else:
+        text = str(lesson.get("text", "")).strip()
+        images = lesson.get("images") or []
+        if not isinstance(images, list):
+            images = []
+        tasks = [{"text": text, "images": images}]
+
+    # Ensure at least one task
+    return tasks if tasks else [{"text": "", "images": []}]
+
+
+async def _send_task_content(
+    message: Message,
+    *,
+    day_num: int,
+    task_idx: int,
+    total_tasks: int,
+    task: dict[str, Any],
+    mode: str,
+    allow_complete: bool,
+) -> None:
+    text = str(task.get("text", "")).strip()
+    images = task.get("images") or []
     if not isinstance(images, list):
         images = []
 
     # Telegram allows max 10 media in one album
     if images:
-        chunks = [images[i:i+10] for i in range(0, len(images), 10)]
+        chunks = [images[i : i + 10] for i in range(0, len(images), 10)]
         for chunk in chunks:
             media = []
             for img in chunk:
@@ -123,10 +156,66 @@ async def send_lesson(message: Message, mongo: Mongo, day_num: int, *, allow_com
             if media:
                 await message.answer_media_group(media=media)
 
-    caption = f"День {day_num}\n\n{text}" if text else f"День {day_num}"
+    header = f"День {day_num} — Задание {task_idx + 1}/{total_tasks}"
+    caption = f"{header}\n\n{text}" if text else header
     await message.answer(
         caption,
-        reply_markup=kb.lesson_kb(day_num) if allow_complete else kb.menu_kb(next_day=None, completed_day=0, max_day=0, entry_test_completed=True, can_continue=False, locked_until=None),
+        reply_markup=kb.task_kb(day_num=day_num, task_idx=task_idx, total_tasks=total_tasks, mode=mode, allow_complete=allow_complete),
+    )
+
+
+async def send_active_day_current_task(message: Message, mongo: Mongo, tg_id: int, user: dict[str, Any], day_num: int) -> None:
+    """Send the user's current task for the active day (progress is persisted)."""
+    lesson = await mongo.get_lesson(day_num)
+    if not lesson:
+        await message.answer(f"Урок на день {day_num} не найден в базе. Сообщи администратору.")
+        return
+
+    tasks = _lesson_to_tasks(lesson)
+    total = len(tasks)
+
+    in_progress_day = user.get("in_progress_day")
+    current_task = int(user.get("current_task", 0) or 0)
+
+    if int(in_progress_day or 0) != int(day_num):
+        current_task = 0
+        await mongo.set_task_progress(tg_id, day_num, current_task)
+
+    # Clamp
+    if current_task < 0:
+        current_task = 0
+    if current_task >= total:
+        current_task = max(total - 1, 0)
+        await mongo.set_task_progress(tg_id, day_num, current_task)
+
+    await _send_task_content(
+        message,
+        day_num=day_num,
+        task_idx=current_task,
+        total_tasks=total,
+        task=tasks[current_task],
+        mode="active",
+        allow_complete=(current_task == total - 1),
+    )
+
+
+async def send_view_day_task(message: Message, mongo: Mongo, day_num: int, task_idx: int) -> None:
+    """Send task for browsing (progress isn't persisted, completion disabled)."""
+    lesson = await mongo.get_lesson(day_num)
+    if not lesson:
+        await message.answer(f"Урок на день {day_num} не найден в базе. Сообщи администратору.")
+        return
+    tasks = _lesson_to_tasks(lesson)
+    total = len(tasks)
+    task_idx = max(0, min(int(task_idx), total - 1))
+    await _send_task_content(
+        message,
+        day_num=day_num,
+        task_idx=task_idx,
+        total_tasks=total,
+        task=tasks[task_idx],
+        mode="view",
+        allow_complete=False,
     )
 
 # ---------- /start ----------
@@ -230,7 +319,7 @@ async def training_next(cb: CallbackQuery, mongo: Mongo):
     if not _is_unlocked(now_utc, next_unlock_at) and day_num > 1:
         # Day 1 is always available right after entry test.
         await cb.message.answer(
-            f"Следующий день будет доступен { _format_dt_berlin(next_unlock_at) } (по московскому времени)."
+            f"Следующий день будет доступен { _format_dt_local(next_unlock_at) } (по московскому времени)."
         )
         await cb.answer()
         return
@@ -242,7 +331,61 @@ async def training_next(cb: CallbackQuery, mongo: Mongo):
         await cb.answer()
         return
 
-    await send_lesson(cb.message, mongo, day_num)
+    # Send ONLY the current task for that day (task-by-task progression).
+    await send_active_day_current_task(cb.message, mongo, tg_id=tg_id, user=user, day_num=day_num)
+    await cb.answer()
+
+
+# ---------- Training: next task (active day) ----------
+@router.callback_query(F.data == "training:task_next")
+async def training_task_next(cb: CallbackQuery, mongo: Mongo):
+    tg_id = cb.from_user.id
+    user = await mongo.get_user(tg_id)
+    if not user or not user.get("entry_test_completed", False):
+        await cb.message.answer("Сначала пройди /start и заверши входное тестирование.")
+        await cb.answer()
+        return
+
+    completed_day = int(user.get("completed_day", 0))
+    day_num = completed_day + 1
+
+    now_utc = datetime.now(timezone.utc)
+    next_unlock_at = _normalize_dt(user.get("next_unlock_at"))
+    if not _is_unlocked(now_utc, next_unlock_at) and day_num > 1:
+        await cb.message.answer(
+            f"Следующий день будет доступен { _format_dt_local(next_unlock_at) } (по московскому времени)."
+        )
+        await cb.answer()
+        return
+
+    lesson = await mongo.get_lesson(day_num)
+    if not lesson:
+        await cb.message.answer(f"Урок на день {day_num} не найден в базе. Сообщи администратору.")
+        await cb.answer()
+        return
+
+    tasks = _lesson_to_tasks(lesson)
+    total = len(tasks)
+
+    in_progress_day = int(user.get("in_progress_day") or 0)
+    current_task = int(user.get("current_task", 0) or 0)
+
+    # If progress wasn't initialized yet, start from 0.
+    if in_progress_day != day_num:
+        current_task = 0
+        await mongo.set_task_progress(tg_id, day_num, current_task)
+
+    if current_task >= total - 1:
+        # Already at last task.
+        await cb.answer("Это последнее задание дня.")
+        await send_active_day_current_task(cb.message, mongo, tg_id=tg_id, user=await mongo.get_user(tg_id), day_num=day_num)
+        return
+
+    new_task = current_task + 1
+    await mongo.set_task_progress(tg_id, day_num, new_task)
+    # Re-read to reflect persisted progress in further logic.
+    user2 = await mongo.get_user(tg_id) or user
+    await send_active_day_current_task(cb.message, mongo, tg_id=tg_id, user=user2, day_num=day_num)
     await cb.answer()
 
 # ---------- Training: complete day ----------
@@ -285,10 +428,34 @@ async def training_complete(cb: CallbackQuery, mongo: Mongo):
     next_unlock_at = _normalize_dt(user.get("next_unlock_at"))
     if not _is_unlocked(now_utc, next_unlock_at) and day_num > 1:
         await cb.message.answer(
-            f"Следующий день будет доступен { _format_dt_berlin(next_unlock_at) } (по времени Берлина)."
+            f"Следующий день будет доступен { _format_dt_local(next_unlock_at) } (по московскому времени)."
         )
         await cb.answer()
         return
+
+    # Enforce task-by-task completion: day can be completed only on the LAST task.
+    lesson = await mongo.get_lesson(day_num)
+    if lesson:
+        tasks = _lesson_to_tasks(lesson)
+        total = len(tasks)
+
+        in_progress_day = int(user.get("in_progress_day") or 0)
+        current_task = int(user.get("current_task", 0) or 0)
+
+        if in_progress_day != day_num:
+            # Progress isn't initialized yet for this day.
+            current_task = 0
+            await mongo.set_task_progress(tg_id, day_num, current_task)
+
+        if current_task < total - 1:
+            await cb.message.answer(
+                f"Чтобы отметить день выполненным, нужно пройти все задания дня.\n"
+                f"Сейчас у тебя задание {current_task + 1}/{total}."
+            )
+            user2 = await mongo.get_user(tg_id) or user
+            await send_active_day_current_task(cb.message, mongo, tg_id=tg_id, user=user2, day_num=day_num)
+            await cb.answer()
+            return
 
     # Mark completion and schedule next unlock
     unlock_utc = _compute_next_unlock_at(now_utc)
@@ -296,7 +463,7 @@ async def training_complete(cb: CallbackQuery, mongo: Mongo):
 
     await cb.message.answer(
         f"День {day_num} отмечен как выполненный ✅\n"
-        f"Следующий день откроется { _format_dt_berlin(unlock_utc) } (по времени Берлина)."
+        f"Следующий день откроется { _format_dt_local(unlock_utc) } (по московскому времени)."
     )
     await render_menu(cb.message, mongo, tg_id=tg_id)
     await cb.answer()
@@ -370,18 +537,70 @@ async def training_show_day(cb: CallbackQuery, mongo: Mongo):
 
     # Past days are always viewable; current day only if unlocked; future days blocked.
     if day_num <= completed_day:
-        await send_lesson(cb.message, mongo, day_num, allow_complete=False)
+        # Browsing mode: start from the first task.
+        await send_view_day_task(cb.message, mongo, day_num, task_idx=0)
         await cb.answer()
         return
 
     if day_num == current_day and unlocked:
-        await send_lesson(cb.message, mongo, day_num, allow_complete=True)
+        # Active mode: resume current task (progress is persisted).
+        await send_active_day_current_task(cb.message, mongo, tg_id=cb.from_user.id, user=user, day_num=day_num)
         await cb.answer()
         return
 
     if day_num == current_day and not unlocked:
         await cb.message.answer(
-            f"Этот день ещё закрыт. Он будет доступен { _format_dt_berlin(next_unlock_at) } (по времени Берлина)."
+            f"Этот день ещё закрыт. Он будет доступен { _format_dt_local(next_unlock_at) } (по московскому времени)."
+        )
+        await cb.answer()
+        return
+
+    await cb.message.answer("Будущие дни недоступны. Проходи обучение по порядку ⏳")
+    await cb.answer()
+
+
+# ---------- Training: browse tasks of a day ----------
+@router.callback_query(F.data.startswith("training:task_show:"))
+async def training_task_show(cb: CallbackQuery, mongo: Mongo):
+    tg_id = cb.from_user.id
+    parts = cb.data.split(":")
+    if len(parts) != 4:
+        await cb.answer()
+        return
+
+    try:
+        day_num = int(parts[2])
+        task_idx = int(parts[3])
+    except Exception:
+        await cb.answer()
+        return
+
+    user = await mongo.get_user(tg_id)
+    if not user or not user.get("entry_test_completed", False):
+        await cb.message.answer("Сначала пройди регистрацию через /start и заверши входное тестирование.")
+        await cb.answer()
+        return
+
+    completed_day = int(user.get("completed_day", 0))
+    now_utc = datetime.now(timezone.utc)
+    next_unlock_at = _normalize_dt(user.get("next_unlock_at"))
+    unlocked = _is_unlocked(now_utc, next_unlock_at)
+    current_day = completed_day + 1
+
+    if day_num <= completed_day:
+        await send_view_day_task(cb.message, mongo, day_num, task_idx)
+        await cb.answer()
+        return
+
+    if day_num == current_day and unlocked:
+        # For the active day we always show the persisted current task.
+        await send_active_day_current_task(cb.message, mongo, tg_id=tg_id, user=user, day_num=day_num)
+        await cb.answer()
+        return
+
+    if day_num == current_day and not unlocked:
+        await cb.message.answer(
+            f"Этот день ещё закрыт. Он будет доступен { _format_dt_local(next_unlock_at) } (по московскому времени)."
         )
         await cb.answer()
         return
