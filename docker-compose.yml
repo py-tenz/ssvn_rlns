@@ -16,7 +16,7 @@ services:
     depends_on:
       - mongo
     volumes:
-      - ./media:/application/media:ro
+      - ./media:/root/ssvn_rlns/media
 
 volumes:
   mongo_data:
