@@ -21,7 +21,7 @@ from . import keyboards as kb
 
 router = Router()
 
-MEDIA_PATH = Path(__file__).parent.parent / "media"
+MEDIA_PATH = Path("/root/ssvn_rlns/media")
 PAGE_SIZE = 10  # for day picker
 
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
