@@ -19,7 +19,7 @@ def seed_lessons(mongo_uri: str, db_name: str, lessons: list[dict]) -> None:
     client = MongoClient(mongo_uri)
     db = client[db_name]
     collection = db["lessons"]
-
+    collection.delete_many({})  # Очистка коллекции перед добавлением новых данных
     # Индекс (если ещё не создан)
     collection.create_index([("dayNum", ASCENDING)], unique=True)
 
