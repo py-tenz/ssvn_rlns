@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from app.handlers import router
 from app.db import Mongo
 from app.middlewares import DbMiddleware
-from config import BOT_TOKEN, MONGO_URI, MONGO_DB, DB_NAME
+from config import BOT_TOKEN, MONGO_URI, MONGO_DB
 import db_adder
 
 async def main():
