@@ -7,9 +7,11 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from app.handlers import router
 from app.db import Mongo
 from app.middlewares import DbMiddleware
-from config import BOT_TOKEN, MONGO_URI, MONGO_DB
+from config import BOT_TOKEN, MONGO_URI, MONGO_DB, DB_NAME
+import db_adder
 
 async def main():
+    db_adder.seed_lessons(MONGO_URI, "pilot_training", db_adder.lessons_data)
     logging.basicConfig(level=logging.INFO)
 
     bot = Bot(token=BOT_TOKEN)

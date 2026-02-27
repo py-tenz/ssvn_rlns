@@ -427,4 +427,4 @@ lessons_data = [
         }
     ]
 
-seed_lessons(MONGO_URI, DB_NAME, lessons_data)
+# seed_lessons(MONGO_URI, DB_NAME, lessons_data)
