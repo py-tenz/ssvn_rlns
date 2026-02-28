@@ -83,7 +83,7 @@ async def send_consents(message: Message) -> None:
     """Send consent documents (docx) before registration."""
     await message.answer(CONSENT_TEXT, reply_markup=kb.consent_kb())
     for filename in (CONSENT_FILE_1, CONSENT_FILE_2):
-        path = CONSENT_DIR / filename
+        path = "/root/ssvn_rlns/media/consents"
         if path.exists():
             print("Документ найден")
             await message.answer_document(FSInputFile(path))
