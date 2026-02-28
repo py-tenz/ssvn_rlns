@@ -121,3 +121,12 @@ def theory_file_kb(topic_key: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="В меню", callback_data="menu:open")],
         ]
     )
+
+
+def consent_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Ознакомился и согласен", callback_data="consent:agree")],
+            [InlineKeyboardButton(text="🔁 Отправить файлы ещё раз", callback_data="consent:resend")],
+        ]
+    )

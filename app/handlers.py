@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 from typing import Optional, Any
 from datetime import datetime, timezone, timedelta, time
@@ -21,7 +23,17 @@ from . import keyboards as kb
 
 router = Router()
 
-MEDIA_PATH = Path("/root/ssvn_rlns/media")
+MEDIA_PATH = Path(__file__).parent.parent / "media"
+
+CONSENT_DIR = MEDIA_PATH / "consents"
+CONSENT_FILE_1 = os.getenv("CONSENT_FILE_1", "soglasie_1.docx")
+CONSENT_FILE_2 = os.getenv("CONSENT_FILE_2", "soglasie_2.docx")
+
+CONSENT_TEXT = (
+    "Перед началом регистрации ознакомься с двумя файлами-согласиями на обработку персональных данных.\n"
+    "Если ты согласен(на), нажми кнопку ниже — после этого я попрошу ввести данные."
+)
+
 PAGE_SIZE = 10  # for day picker
 
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
@@ -31,6 +43,11 @@ LOCAL_TZ = MOSCOW_TZ
 class Registration(StatesGroup):
     name = State()
     birth_year = State()
+
+# ---------- FSM for consent before registration ----------
+class Consent(StatesGroup):
+    pending = State()
+
 
 # ---------- Helpers ----------
 def _format_dt_local(dt_utc: datetime) -> str:
@@ -61,6 +78,19 @@ def _normalize_dt(dt: object) -> Optional[datetime]:
     return None
 
 
+
+async def send_consents(message: Message) -> None:
+    """Send consent documents (docx) before registration."""
+    await message.answer(CONSENT_TEXT, reply_markup=kb.consent_kb())
+    for filename in (CONSENT_FILE_1, CONSENT_FILE_2):
+        path = CONSENT_DIR / filename
+        if path.exists():
+            await message.answer_document(FSInputFile(path))
+        else:
+            await message.answer(
+                f"⚠️ Не найден файл согласия: {filename}. Ожидаю его в {path}."
+            )
+
 async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
     """Render main menu into the given chat message.
 
@@ -71,172 +101,42 @@ async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
     max_day = await mongo.get_max_day()
 
     if not user:
-        # Should not happen often - fallback
-        await message.answer("Давайте знакомиться. Как тебя зовут?")
+        await message.answer("Чтобы начать, отправь команду /start")
         return
 
-    completed_day = int(user.get("completed_day", 0))
-    entry_done = bool(user.get("entry_test_completed", False))
-    next_day = (completed_day + 1) if entry_done else None
+    completed_day = int(user.get("completed_day", 0) or 0)
+    entry_test_completed = bool(user.get("entry_test_completed", False))
 
-    now_utc = datetime.now(timezone.utc)
+    next_day = completed_day + 1
+    if max_day and next_day > max_day:
+        next_day = None
+
+    now = datetime.now(timezone.utc)
     next_unlock_at = _normalize_dt(user.get("next_unlock_at"))
-    unlocked = _is_unlocked(now_utc, next_unlock_at)
+    can_continue = _is_unlocked(now, next_unlock_at)
+    locked_until = None if can_continue else (_format_dt_local(next_unlock_at) if next_unlock_at else None)
 
-    # You can continue only when next day exists and unlock time has come.
-    can_continue = bool(entry_done and next_day and (next_day <= max_day) and unlocked)
-    locked_until = _format_dt_local(next_unlock_at) if (next_unlock_at and not unlocked) else None
+    name = user.get("name") or "пилот"
 
     await message.answer(
-        "Главное меню:",
+        f"Привет, {name}!\nВыбери действие:",
         reply_markup=kb.menu_kb(
             next_day=next_day,
             completed_day=completed_day,
             max_day=max_day,
-            entry_test_completed=entry_done,
+            entry_test_completed=entry_test_completed,
             can_continue=can_continue,
             locked_until=locked_until,
         ),
     )
 
-def _lesson_to_tasks(lesson: dict[str, Any]) -> list[dict[str, Any]]:
-    """Normalize lesson document into a list of tasks.
 
-    Supports:
-      1) New format: {dayNum, tasks:[{text, images}, ...]}
-      2) Legacy format: {dayNum, text, images} -> converted into 1 task
-    """
-    raw_tasks = lesson.get("tasks")
-    tasks: list[dict[str, Any]] = []
-
-    if isinstance(raw_tasks, list) and raw_tasks:
-        for t in raw_tasks:
-            if not isinstance(t, dict):
-                continue
-            text = str(t.get("text", "")).strip()
-            images = t.get("images") or []
-            if not isinstance(images, list):
-                images = []
-            tasks.append({"text": text, "images": images})
-    else:
-        text = str(lesson.get("text", "")).strip()
-        images = lesson.get("images") or []
-        if not isinstance(images, list):
-            images = []
-        tasks = [{"text": text, "images": images}]
-
-    # Ensure at least one task
-    return tasks if tasks else [{"text": "", "images": []}]
-
-
-async def _send_task_content(
-    message: Message,
-    *,
-    day_num: int,
-    task_idx: int,
-    total_tasks: int,
-    task: dict[str, Any],
-    mode: str,
-    allow_complete: bool,
-) -> None:
-    text = str(task.get("text", "")).strip()
-    images = task.get("images") or []
-    if not isinstance(images, list):
-        images = []
-
-    # Telegram allows max 10 media in one album
-    if images:
-        chunks = [images[i : i + 10] for i in range(0, len(images), 10)]
-        for chunk in chunks:
-            media = []
-            for img in chunk:
-                img_path = MEDIA_PATH / str(img)
-                if img_path.exists():
-                    media.append(InputMediaPhoto(media=FSInputFile(img_path)))
-            if media:
-                await message.answer_media_group(media=media)
-
-    header = f"День {day_num} — Задание {task_idx + 1}/{total_tasks}"
-    caption = f"{header}\n\n{text}" if text else header
+@router.message(Consent.pending)
+async def consent_wait(message: Message):
     await message.answer(
-        caption,
-        reply_markup=kb.task_kb(day_num=day_num, task_idx=task_idx, total_tasks=total_tasks, mode=mode, allow_complete=allow_complete),
+        "Чтобы продолжить, нажми кнопку «✅ Ознакомился и согласен».",
+        reply_markup=kb.consent_kb(),
     )
-
-
-async def send_active_day_current_task(message: Message, mongo: Mongo, tg_id: int, user: dict[str, Any], day_num: int) -> None:
-    """Send the user's current task for the active day (progress is persisted)."""
-    lesson = await mongo.get_lesson(day_num)
-    if not lesson:
-        await message.answer(f"Урок на день {day_num} не найден в базе. Сообщи администратору.")
-        return
-
-    tasks = _lesson_to_tasks(lesson)
-    total = len(tasks)
-
-    in_progress_day = user.get("in_progress_day")
-    current_task = int(user.get("current_task", 0) or 0)
-
-    if int(in_progress_day or 0) != int(day_num):
-        current_task = 0
-        await mongo.set_task_progress(tg_id, day_num, current_task)
-
-    # Clamp
-    if current_task < 0:
-        current_task = 0
-    if current_task >= total:
-        current_task = max(total - 1, 0)
-        await mongo.set_task_progress(tg_id, day_num, current_task)
-
-    await _send_task_content(
-        message,
-        day_num=day_num,
-        task_idx=current_task,
-        total_tasks=total,
-        task=tasks[current_task],
-        mode="active",
-        allow_complete=(current_task == total - 1),
-    )
-
-
-async def send_view_day_task(message: Message, mongo: Mongo, day_num: int, task_idx: int) -> None:
-    """Send task for browsing (progress isn't persisted, completion disabled)."""
-    lesson = await mongo.get_lesson(day_num)
-    if not lesson:
-        await message.answer(f"Урок на день {day_num} не найден в базе. Сообщи администратору.")
-        return
-    tasks = _lesson_to_tasks(lesson)
-    total = len(tasks)
-    task_idx = max(0, min(int(task_idx), total - 1))
-    await _send_task_content(
-        message,
-        day_num=day_num,
-        task_idx=task_idx,
-        total_tasks=total,
-        task=tasks[task_idx],
-        mode="view",
-        allow_complete=False,
-    )
-
-# ---------- /start ----------
-@router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, mongo: Mongo):
-    tg_id = message.from_user.id
-    user = await mongo.get_user(tg_id)
-
-    if user:
-        await state.clear()
-        if not user.get("entry_test_completed", False):
-            await message.answer(
-                "Перед началом обучения пройди входное тестирование и нажми «Выполнено».",
-                reply_markup=kb.entry_test_kb(),
-            )
-        else:
-            await render_menu(message, mongo, tg_id=tg_id)
-        return
-
-    await message.answer("Давайте знакомиться. Как тебя зовут?")
-    await state.set_state(Registration.name)
 
 @router.message(Registration.name)
 async def reg_name(message: Message, state: FSMContext):
@@ -277,6 +177,28 @@ async def menu_open(cb: CallbackQuery, mongo: Mongo):
 
 @router.callback_query(F.data == "noop")
 async def noop(cb: CallbackQuery):
+    await cb.answer()
+
+
+# ---------- Consent (before registration) ----------
+@router.callback_query(F.data == "consent:resend")
+async def consent_resend(cb: CallbackQuery, state: FSMContext):
+    await send_consents(cb.message)
+    await state.set_state(Consent.pending)
+    await cb.answer()
+
+@router.callback_query(F.data == "consent:agree")
+async def consent_agree(cb: CallbackQuery, state: FSMContext, mongo: Mongo):
+    tg_id = cb.from_user.id
+    user = await mongo.get_user(tg_id)
+    if user:
+        # User already exists -> go to menu
+        await state.clear()
+        await render_menu(cb.message, mongo, tg_id=tg_id)
+        await cb.answer()
+        return
+    await cb.message.answer("Отлично. Как тебя зовут?")
+    await state.set_state(Registration.name)
     await cb.answer()
 
 # ---------- Entry test ----------
