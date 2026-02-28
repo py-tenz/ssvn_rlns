@@ -25,7 +25,7 @@ router = Router()
 
 MEDIA_PATH = Path(__file__).parent.parent / "media"
 
-CONSENT_DIR =  "/root/ssvn_rlns/media/consents"
+CONSENT_DIR = MEDIA_PATH / "consents"
 CONSENT_FILE_1 = os.getenv("CONSENT_FILE_1", "soglasie_1.docx")
 CONSENT_FILE_2 = os.getenv("CONSENT_FILE_2", "soglasie_2.docx")
 
@@ -83,9 +83,8 @@ async def send_consents(message: Message) -> None:
     """Send consent documents (docx) before registration."""
     await message.answer(CONSENT_TEXT, reply_markup=kb.consent_kb())
     for filename in (CONSENT_FILE_1, CONSENT_FILE_2):
-        path = Path(CONSENT_DIR) / filename
+        path = CONSENT_DIR / filename
         if path.exists():
-            print("Документ найден")
             await message.answer_document(FSInputFile(path))
         else:
             await message.answer(
@@ -131,19 +130,150 @@ async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
         ),
     )
 
+def _lesson_to_tasks(lesson: dict) -> list[dict]:
+    """
+    Normalizes lesson schema to tasks[].
+    Supports:
+      - new schema: {"dayNum": 1, "tasks": [{"text": "...", "images": [...]}, ...]}
+      - legacy schema: {"dayNum": 1, "text": "...", "images": [...]}
+    """
+    tasks = lesson.get("tasks")
+    if isinstance(tasks, list) and tasks:
+        norm: list[dict] = []
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            norm.append(
+                {
+                    "text": str(t.get("text") or "").strip(),
+                    "images": list(t.get("images") or []),
+                }
+            )
+        return norm or [{"text": str(lesson.get("text") or "").strip(), "images": list(lesson.get("images") or [])}]
+
+    # legacy fallback
+    return [{"text": str(lesson.get("text") or "").strip(), "images": list(lesson.get("images") or [])}]
+
+
+async def _send_task_content(message: Message, task: dict) -> None:
+    """Sends task images (as albums where possible) and then text."""
+    images = list(task.get("images") or [])
+    text = str(task.get("text") or "").strip()
+
+    # send images
+    if images:
+        # collect existing image paths only
+        existing_paths: list[Path] = []
+        for img in images:
+            p = MEDIA_PATH / str(img)
+            if p.exists():
+                existing_paths.append(p)
+
+        # Telegram albums: 2..10 items per media_group
+        for i in range(0, len(existing_paths), 10):
+            chunk = existing_paths[i : i + 10]
+            if len(chunk) >= 2:
+                media = [InputMediaPhoto(media=FSInputFile(p)) for p in chunk]
+                await message.answer_media_group(media=media)
+            elif len(chunk) == 1:
+                await message.answer_photo(photo=FSInputFile(chunk[0]))
+
+    # send text
+    if text:
+        await message.answer(text)
+
+
+async def send_view_day_task(message: Message, mongo: Mongo, day_num: int, task_idx: int) -> None:
+    """Shows a specific task of a chosen day (view-only mode)."""
+    lesson = await mongo.get_lesson(int(day_num))
+    if not lesson:
+        await message.answer(f"Урок на день {day_num} не найден в базе.")
+        return
+
+    tasks = _lesson_to_tasks(lesson)
+    total = len(tasks)
+    if total == 0:
+        await message.answer(f"В дне {day_num} нет заданий.")
+        return
+
+    task_idx = max(0, min(int(task_idx), total - 1))
+    await message.answer(f"День {day_num}. Задание {task_idx + 1}/{total}")
+    await _send_task_content(message, tasks[task_idx])
+
+    await message.answer(
+        "Выбор задания:",
+        reply_markup=kb.task_kb(
+            day_num=day_num,
+            task_idx=task_idx,
+            total_tasks=total,
+            mode="view",
+            allow_complete=False,
+        ),
+    )
+
+
+async def send_active_day_current_task(
+    message: Message,
+    mongo: Mongo,
+    *,
+    tg_id: int,
+    user: dict,
+    day_num: int,
+) -> None:
+    """Shows the current task for the active (next) day; uses persisted progress."""
+    lesson = await mongo.get_lesson(int(day_num))
+    if not lesson:
+        await message.answer(f"Урок на день {day_num} не найден в базе.")
+        return
+
+    tasks = _lesson_to_tasks(lesson)
+    total = len(tasks)
+    if total == 0:
+        await message.answer(f"В дне {day_num} нет заданий.")
+        return
+
+    in_progress_day = int(user.get("in_progress_day") or 0)
+    current_task = int(user.get("current_task", 0) or 0)
+
+    # initialize progress for this day if needed
+    if in_progress_day != int(day_num):
+        current_task = 0
+        await mongo.set_task_progress(tg_id, int(day_num), current_task)
+
+    current_task = max(0, min(current_task, total - 1))
+
+    await message.answer(f"День {day_num}. Задание {current_task + 1}/{total}")
+    await _send_task_content(message, tasks[current_task])
+
+    await message.answer(
+        "Навигация:",
+        reply_markup=kb.task_kb(
+            day_num=day_num,
+            task_idx=current_task,
+            total_tasks=total,
+            mode="active",
+	    allow_complete=True,
+        ),
+    )
+
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, mongo: Mongo):
+async def start(message: Message, state: FSMContext, mongo: Mongo):
+    """Entry point.
+
+    Existing users -> menu.
+    New users -> consent documents, then registration.
+    """
     tg_id = message.from_user.id
     user = await mongo.get_user(tg_id)
 
-    await state.clear()  # чтобы /start работал из любого состояния
-
     if user:
+        await state.clear()
         await render_menu(message, mongo, tg_id=tg_id)
         return
 
-    await send_consents(message)
     await state.set_state(Consent.pending)
+    await send_consents(message)
+
 
 @router.message(Consent.pending)
 async def consent_wait(message: Message):
