@@ -25,7 +25,7 @@ router = Router()
 
 MEDIA_PATH = Path(__file__).parent.parent / "media"
 
-CONSENT_DIR = MEDIA_PATH / "consents"
+CONSENT_DIR =  "/root/ssvn_rlns/media/consents"
 CONSENT_FILE_1 = os.getenv("CONSENT_FILE_1", "soglasie_1.docx")
 CONSENT_FILE_2 = os.getenv("CONSENT_FILE_2", "soglasie_2.docx")
 
