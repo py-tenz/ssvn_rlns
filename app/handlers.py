@@ -85,6 +85,7 @@ async def send_consents(message: Message) -> None:
     for filename in (CONSENT_FILE_1, CONSENT_FILE_2):
         path = CONSENT_DIR / filename
         if path.exists():
+            print("Документ найден")
             await message.answer_document(FSInputFile(path))
         else:
             await message.answer(
