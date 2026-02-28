@@ -83,7 +83,7 @@ async def send_consents(message: Message) -> None:
     """Send consent documents (docx) before registration."""
     await message.answer(CONSENT_TEXT, reply_markup=kb.consent_kb())
     for filename in (CONSENT_FILE_1, CONSENT_FILE_2):
-        path = "/root/ssvn_rlns/media/consents"
+        path = Path(CONSENT_DIR) / filename
         if path.exists():
             print("Документ найден")
             await message.answer_document(FSInputFile(path))
@@ -131,6 +131,19 @@ async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
         ),
     )
 
+@router.message(CommandStart())
+async def cmd_start(message: Message, state: FSMContext, mongo: Mongo):
+    tg_id = message.from_user.id
+    user = await mongo.get_user(tg_id)
+
+    await state.clear()  # чтобы /start работал из любого состояния
+
+    if user:
+        await render_menu(message, mongo, tg_id=tg_id)
+        return
+
+    await send_consents(message)
+    await state.set_state(Consent.pending)
 
 @router.message(Consent.pending)
 async def consent_wait(message: Message):
