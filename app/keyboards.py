@@ -9,6 +9,7 @@ def menu_kb(
     completed_day: int,
     max_day: int,
     entry_test_completed: bool,
+    final_test_completed: bool = False,
     can_continue: bool = True,
     locked_until: str | None = None,
 ) -> InlineKeyboardMarkup:
@@ -16,15 +17,27 @@ def menu_kb(
     if not entry_test_completed:
         rows.append([InlineKeyboardButton(text="Входное тестирование", callback_data="entry_test:open")])
     else:
-        if next_day and next_day <= max_day and can_continue:
+        finished = bool(max_day) and completed_day >= max_day
+        if finished and not final_test_completed:
+            rows.append([InlineKeyboardButton(text="Итоговое тестирование", callback_data="final_test:open")])
+        if (not finished) and next_day and next_day <= max_day and can_continue:
             rows.append([InlineKeyboardButton(text=f"Продолжить: день {next_day}", callback_data="training:next")])
-        elif next_day and next_day <= max_day and locked_until:
+        elif (not finished) and next_day and next_day <= max_day and locked_until:
             rows.append([InlineKeyboardButton(text=f"Следующий день откроется {locked_until}", callback_data="noop")])
         rows.append([InlineKeyboardButton(text="Выбрать день", callback_data="training:choose_page:1")])
 
     rows.append([InlineKeyboardButton(text="Изучить теорию", callback_data="theory:menu")])
 
-    status = f"Пройдено дней: {completed_day}/{max_day}" if max_day else "Уроки пока не загружены"
+    if not max_day:
+        status = "Уроки пока не загружены"
+    else:
+        finished = completed_day >= max_day
+        if finished and final_test_completed:
+            status = f"Обучение завершено ✅ {completed_day}/{max_day}"
+        elif finished and not final_test_completed:
+            status = f"Пройдено дней: {completed_day}/{max_day} • осталось итоговое тестирование"
+        else:
+            status = f"Пройдено дней: {completed_day}/{max_day}"
     rows.append([InlineKeyboardButton(text=status, callback_data="noop")])
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -41,6 +54,19 @@ def entry_test_kb() -> InlineKeyboardMarkup:
         ]
     )
 
+
+
+def final_test_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Первое тестирование", url="https://forms.gle/95pxWHj4rvwJzN318")],
+            [InlineKeyboardButton(text="Второе тестирование", url="https://forms.gle/khJb1FowpBWKMujw9")],
+            [InlineKeyboardButton(text="Третье тестирование", url="https://forms.gle/HoepHvnXxNqAMHhX6")],
+            [InlineKeyboardButton(text="Четвертое тестирование", url="https://forms.gle/MW6TF3bZEeEB4ywa6")],
+            [InlineKeyboardButton(text="Выполнено", callback_data="final_test:done")],
+            [InlineKeyboardButton(text="В меню", callback_data="menu:open")],
+        ]
+    )
 def lesson_kb(day_num: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

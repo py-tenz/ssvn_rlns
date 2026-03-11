@@ -60,6 +60,8 @@ class Mongo:
             "name": name,
             "birth_year": birth_year,
             "entry_test_completed": False,
+            # Re-testing at the end of the training.
+            "final_test_completed": False,
             "completed_day": 0,  # last fully completed day (0 = none)
             # When the next day becomes available (UTC datetime). Missing/None => unlocked.
             "next_unlock_at": None,
@@ -80,6 +82,14 @@ class Mongo:
         await self.users.update_one(
             {"_id": tg_id},
             {"$set": {"entry_test_completed": completed, "updated_at": now}},
+            upsert=False,
+        )
+
+    async def set_final_test_completed(self, tg_id: int, completed: bool = True) -> None:
+        now = datetime.now(timezone.utc)
+        await self.users.update_one(
+            {"_id": tg_id},
+            {"$set": {"final_test_completed": completed, "updated_at": now}},
             upsert=False,
         )
 

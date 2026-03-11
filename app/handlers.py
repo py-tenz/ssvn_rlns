@@ -34,6 +34,11 @@ CONSENT_TEXT = (
     "Если ты согласен(на), нажми кнопку ниже — после этого я попрошу ввести данные."
 )
 
+FINAL_TEST_TEXT = (
+    "Ты завершил(а) обучение! Теперь необходимо пройти повторное тестирование.\n"
+    "Перейди по ссылкам ниже и заполни формы, затем нажми «Выполнено»."
+)
+
 PAGE_SIZE = 10  # for day picker
 
 MOSCOW_TZ = ZoneInfo("Europe/Moscow")
@@ -77,6 +82,92 @@ def _normalize_dt(dt: object) -> Optional[datetime]:
         return dt
     return None
 
+# ---------- Lessons / Tasks helpers ----------
+def _lesson_to_tasks(lesson: dict) -> list[dict]:
+    """Normalize lesson schema to tasks[].
+
+    Supports new schema: {dayNum, tasks: [{text, images}]}
+    and legacy schema: {dayNum, text, images}.
+    """
+    tasks = lesson.get("tasks")
+    if isinstance(tasks, list) and tasks:
+        norm: list[dict] = []
+        for t in tasks:
+            if not isinstance(t, dict):
+                continue
+            norm.append({"text": str(t.get("text") or "").strip(), "images": list(t.get("images") or [])})
+        if norm:
+            return norm
+
+    return [{"text": str(lesson.get("text") or "").strip(), "images": list(lesson.get("images") or [])}]
+
+
+async def _send_task_content(message: Message, task: dict) -> None:
+    """Send task images (as albums where possible) and then text."""
+    images = list(task.get("images") or [])
+    text = str(task.get("text") or "").strip()
+
+    if images:
+        existing: list[Path] = []
+        for img in images:
+            p = MEDIA_PATH / str(img)
+            if p.exists():
+                existing.append(p)
+
+        for i in range(0, len(existing), 10):
+            chunk = existing[i : i + 10]
+            if len(chunk) >= 2:
+                media = [InputMediaPhoto(media=FSInputFile(p)) for p in chunk]
+                await message.answer_media_group(media=media)
+            elif len(chunk) == 1:
+                await message.answer_photo(photo=FSInputFile(chunk[0]))
+
+    if text:
+        await message.answer(text)
+
+
+async def send_view_day_task(message: Message, mongo: Mongo, day_num: int, task_idx: int) -> None:
+    lesson = await mongo.get_lesson(int(day_num))
+    if not lesson:
+        await message.answer(f"Урок на день {day_num} не найден в базе.")
+        return
+    tasks = _lesson_to_tasks(lesson)
+    total = len(tasks)
+    if total == 0:
+        await message.answer(f"В дне {day_num} нет заданий.")
+        return
+    task_idx = max(0, min(int(task_idx), total - 1))
+    await message.answer(f"День {day_num}. Задание {task_idx + 1}/{total}")
+    await _send_task_content(message, tasks[task_idx])
+    await message.answer(
+        "Навигация:",
+        reply_markup=kb.task_kb(day_num=day_num, task_idx=task_idx, total_tasks=total, mode="view", allow_complete=False),
+    )
+
+
+async def send_active_day_current_task(message: Message, mongo: Mongo, *, tg_id: int, user: dict, day_num: int) -> None:
+    lesson = await mongo.get_lesson(int(day_num))
+    if not lesson:
+        await message.answer(f"Урок на день {day_num} не найден в базе.")
+        return
+    tasks = _lesson_to_tasks(lesson)
+    total = len(tasks)
+    if total == 0:
+        await message.answer(f"В дне {day_num} нет заданий.")
+        return
+    in_progress_day = int(user.get("in_progress_day") or 0)
+    current_task = int(user.get("current_task", 0) or 0)
+    if in_progress_day != int(day_num):
+        current_task = 0
+        await mongo.set_task_progress(tg_id, int(day_num), current_task)
+    current_task = max(0, min(current_task, total - 1))
+    await message.answer(f"День {day_num}. Задание {current_task + 1}/{total}")
+    await _send_task_content(message, tasks[current_task])
+    await message.answer(
+        "Навигация:",
+        reply_markup=kb.task_kb(day_num=day_num, task_idx=current_task, total_tasks=total, mode="active", allow_complete=True),
+    )
+
 
 
 async def send_consents(message: Message) -> None:
@@ -106,6 +197,7 @@ async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
 
     completed_day = int(user.get("completed_day", 0) or 0)
     entry_test_completed = bool(user.get("entry_test_completed", False))
+    final_test_completed = bool(user.get("final_test_completed", False))
 
     next_day = completed_day + 1
     if max_day and next_day > max_day:
@@ -125,136 +217,12 @@ async def render_menu(message: Message, mongo: Mongo, tg_id: int) -> None:
             completed_day=completed_day,
             max_day=max_day,
             entry_test_completed=entry_test_completed,
+            final_test_completed=final_test_completed,
             can_continue=can_continue,
             locked_until=locked_until,
         ),
     )
 
-def _lesson_to_tasks(lesson: dict) -> list[dict]:
-    """
-    Normalizes lesson schema to tasks[].
-    Supports:
-      - new schema: {"dayNum": 1, "tasks": [{"text": "...", "images": [...]}, ...]}
-      - legacy schema: {"dayNum": 1, "text": "...", "images": [...]}
-    """
-    tasks = lesson.get("tasks")
-    if isinstance(tasks, list) and tasks:
-        norm: list[dict] = []
-        for t in tasks:
-            if not isinstance(t, dict):
-                continue
-            norm.append(
-                {
-                    "text": str(t.get("text") or "").strip(),
-                    "images": list(t.get("images") or []),
-                }
-            )
-        return norm or [{"text": str(lesson.get("text") or "").strip(), "images": list(lesson.get("images") or [])}]
-
-    # legacy fallback
-    return [{"text": str(lesson.get("text") or "").strip(), "images": list(lesson.get("images") or [])}]
-
-
-async def _send_task_content(message: Message, task: dict) -> None:
-    """Sends task images (as albums where possible) and then text."""
-    images = list(task.get("images") or [])
-    text = str(task.get("text") or "").strip()
-
-    # send images
-    if images:
-        # collect existing image paths only
-        existing_paths: list[Path] = []
-        for img in images:
-            p = MEDIA_PATH / str(img)
-            if p.exists():
-                existing_paths.append(p)
-
-        # Telegram albums: 2..10 items per media_group
-        for i in range(0, len(existing_paths), 10):
-            chunk = existing_paths[i : i + 10]
-            if len(chunk) >= 2:
-                media = [InputMediaPhoto(media=FSInputFile(p)) for p in chunk]
-                await message.answer_media_group(media=media)
-            elif len(chunk) == 1:
-                await message.answer_photo(photo=FSInputFile(chunk[0]))
-
-    # send text
-    if text:
-        await message.answer(text)
-
-
-async def send_view_day_task(message: Message, mongo: Mongo, day_num: int, task_idx: int) -> None:
-    """Shows a specific task of a chosen day (view-only mode)."""
-    lesson = await mongo.get_lesson(int(day_num))
-    if not lesson:
-        await message.answer(f"Урок на день {day_num} не найден в базе.")
-        return
-
-    tasks = _lesson_to_tasks(lesson)
-    total = len(tasks)
-    if total == 0:
-        await message.answer(f"В дне {day_num} нет заданий.")
-        return
-
-    task_idx = max(0, min(int(task_idx), total - 1))
-    await message.answer(f"День {day_num}. Задание {task_idx + 1}/{total}")
-    await _send_task_content(message, tasks[task_idx])
-
-    await message.answer(
-        "Выбор задания:",
-        reply_markup=kb.task_kb(
-            day_num=day_num,
-            task_idx=task_idx,
-            total_tasks=total,
-            mode="view",
-            allow_complete=False,
-        ),
-    )
-
-
-async def send_active_day_current_task(
-    message: Message,
-    mongo: Mongo,
-    *,
-    tg_id: int,
-    user: dict,
-    day_num: int,
-) -> None:
-    """Shows the current task for the active (next) day; uses persisted progress."""
-    lesson = await mongo.get_lesson(int(day_num))
-    if not lesson:
-        await message.answer(f"Урок на день {day_num} не найден в базе.")
-        return
-
-    tasks = _lesson_to_tasks(lesson)
-    total = len(tasks)
-    if total == 0:
-        await message.answer(f"В дне {day_num} нет заданий.")
-        return
-
-    in_progress_day = int(user.get("in_progress_day") or 0)
-    current_task = int(user.get("current_task", 0) or 0)
-
-    # initialize progress for this day if needed
-    if in_progress_day != int(day_num):
-        current_task = 0
-        await mongo.set_task_progress(tg_id, int(day_num), current_task)
-
-    current_task = max(0, min(current_task, total - 1))
-
-    await message.answer(f"День {day_num}. Задание {current_task + 1}/{total}")
-    await _send_task_content(message, tasks[current_task])
-
-    await message.answer(
-        "Навигация:",
-        reply_markup=kb.task_kb(
-            day_num=day_num,
-            task_idx=current_task,
-            total_tasks=total,
-            mode="active",
-	    allow_complete=True,
-        ),
-    )
 
 @router.message(CommandStart())
 async def start(message: Message, state: FSMContext, mongo: Mongo):
@@ -362,6 +330,20 @@ async def entry_test_done(cb: CallbackQuery, mongo: Mongo):
     await render_menu(cb.message, mongo, tg_id=tg_id)
     await cb.answer()
 
+# ---------- Final test (re-testing at the end) ----------
+@router.callback_query(F.data == "final_test:open")
+async def final_test_open(cb: CallbackQuery):
+    await cb.message.answer(FINAL_TEST_TEXT, reply_markup=kb.final_test_kb())
+    await cb.answer()
+
+@router.callback_query(F.data == "final_test:done")
+async def final_test_done(cb: CallbackQuery, mongo: Mongo):
+    tg_id = cb.from_user.id
+    await mongo.set_final_test_completed(tg_id, True)
+    await cb.message.answer("Спасибо! Итоговое тестирование отмечено как выполненное ✅")
+    await render_menu(cb.message, mongo, tg_id=tg_id)
+    await cb.answer()
+
 # ---------- Training: next day ----------
 @router.callback_query(F.data == "training:next")
 async def training_next(cb: CallbackQuery, mongo: Mongo):
@@ -392,7 +374,11 @@ async def training_next(cb: CallbackQuery, mongo: Mongo):
 
     max_day = await mongo.get_max_day()
     if max_day and day_num > max_day:
-        await cb.message.answer("Поздравляю! Ты прошёл(ла) все доступные дни обучения.")
+        final_done = bool(user.get("final_test_completed", False))
+        if not final_done:
+            await cb.message.answer(FINAL_TEST_TEXT, reply_markup=kb.final_test_kb())
+        else:
+            await cb.message.answer("Поздравляю! Ты прошёл(ла) все доступные дни обучения и завершил(а) итоговое тестирование ✅")
         await render_menu(cb.message, mongo, tg_id=tg_id)
         await cb.answer()
         return
@@ -527,10 +513,18 @@ async def training_complete(cb: CallbackQuery, mongo: Mongo):
     unlock_utc = _compute_next_unlock_at(now_utc)
     await mongo.mark_day_completed(tg_id=tg_id, completed_day=day_num, next_unlock_at=unlock_utc, last_completed_at=now_utc)
 
-    await cb.message.answer(
-        f"День {day_num} отмечен как выполненный ✅\n"
-        f"Следующий день откроется { _format_dt_local(unlock_utc) } (по московскому времени)."
-    )
+    max_day = await mongo.get_max_day()
+    if max_day and day_num >= max_day:
+        await cb.message.answer(
+            f"День {day_num} отмечен как выполненный ✅\n\n{FINAL_TEST_TEXT}",
+            reply_markup=kb.final_test_kb(),
+        )
+    else:
+        await cb.message.answer(
+            f"День {day_num} отмечен как выполненный ✅\n"
+            f"Следующий день откроется {_format_dt_local(unlock_utc)} (по московскому времени)."
+        )
+
     await render_menu(cb.message, mongo, tg_id=tg_id)
     await cb.answer()
 
@@ -694,13 +688,13 @@ async def theory_topic(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("theory:file:"))
 async def theory_send_file(cb: CallbackQuery):
     key = cb.data.split(":")[-1]
-    file_path = MEDIA_PATH / f"{key}.txt"
+    file_path = MEDIA_PATH / f"{key}.pdf"
     if not file_path.exists():
         await cb.message.answer("Файл не найден.")
         await cb.answer()
         return
 
-    await cb.message.answer_document(FSInputFile(file_path), caption="Вот файл:")
+    await cb.message.answer_document(FSInputFile(file_path), caption="Вот PDF:")
     await cb.answer()
 
 # ---------- Convenience commands ----------
