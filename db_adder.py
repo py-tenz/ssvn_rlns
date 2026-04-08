@@ -154,6 +154,24 @@ lessons_data = [
             ]
         },
         {
+            "dayNum": 6,
+            "tasks": [
+                {
+                    "text": "Сегодня нет заданий. Отдых!",
+                    "images": []
+                }
+            ]
+        },
+        {
+            "dayNum": 7,
+            "tasks": [
+                {
+                    "text": "Сегодня нет заданий. Отдых!",
+                    "images": []
+                }
+            ]
+        },
+        {
             "dayNum": 8,
             "tasks": [
                 {
@@ -247,6 +265,24 @@ lessons_data = [
             ]
         },
         {
+            "dayNum": 13,
+            "tasks": [
+                {
+                    "text": "Сегодня нет заданий. Отдых!",
+                    "images": []
+                }
+            ]
+        },
+        {
+            "dayNum": 14,
+            "tasks": [
+                {
+                    "text": "Сегодня нет заданий. Отдых!",
+                    "images": []
+                }
+            ]
+        },
+        {
             "dayNum": 15,
             "tasks": [
                 {
@@ -333,6 +369,24 @@ lessons_data = [
                 {
                     "text": "Приступаем к арифметике",
                     "images": ["/root/ssvn_rlns/media/day19_task3.jpg"]
+                }
+            ]
+        },
+        {
+            "dayNum": 20,
+            "tasks": [
+                {
+                    "text": "Сегодня нет заданий. Отдых!",
+                    "images": []
+                }
+            ]
+        },
+        {
+            "dayNum": 21,
+            "tasks": [
+                {
+                    "text": "Сегодня нет заданий. Отдых!",
+                    "images": []
                 }
             ]
         },
